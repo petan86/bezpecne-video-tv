@@ -12,6 +12,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - televizní launcher, landscape rozhraní a ovládání dálkovým ovladačem,
 - přednastavený povolený kanál Toto je Slivki pro Matýska,
 - vyhledávání videí přímo z rodičovské správy bez opisování odkazu,
+- kontrola, stažení a spuštění aktualizace přímo z rodičovské správy,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.

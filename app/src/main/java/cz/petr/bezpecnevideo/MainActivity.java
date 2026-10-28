@@ -221,6 +221,11 @@ public final class MainActivity extends Activity {
         premium.setOnClickListener(v -> showPremiumLogin());
         content.addView(premium, wide());
         content.addView(text("Přihlášení probíhá přímo na stránce YouTube. Aplikace heslo neukládá.", 13, Color.GRAY));
+        content.addView(space(14));
+        Button update = button("⬇  Zkontrolovat a nainstalovat aktualizaci", Color.rgb(42, 106, 72));
+        update.setOnClickListener(v -> new AppUpdater(this).checkAndInstall());
+        content.addView(update, wide());
+        content.addView(text("Aktualizace se bezpečně stahují z projektu petan86/bezpecne-video-tv na GitHubu.", 13, Color.GRAY));
         content.addView(space(26));
         content.addView(title("Povolený obsah", 24));
         addManagementList(content, VideoStore.MATYSEK, "Matýsek");
