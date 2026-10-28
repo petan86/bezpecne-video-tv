@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.7 – televizní rozhraní ve stylu YouTube
+# Bezpečné video 0.1.8 – opravené otevření instalace
 
-Aktualizace přibližuje dětskou obrazovku známému rozložení YouTube pro TV při zachování vlastní identity aplikace.
+Aktualizace opravuje situaci, kdy se nová verze stáhla, ale Google TV neotevřela systémovou instalaci.
 
 ## Funkce
 
@@ -31,10 +31,13 @@ Aktualizace přibližuje dětskou obrazovku známému rozložení YouTube pro TV
 - kategorie povolených kanálů,
 - název videa a kanálu pod každým náhledem,
 - zvětšení právě vybraného videa.
+- správný příjem oznámení správce stahování na nových verzích Google TV,
+- záložní kontrola stavu stahování každou sekundu,
+- automatické otevření systémového instalátoru po úspěšném stažení.
 
 ## Instalace
 
-V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.7.apk` ručně.
+Tuto opravnou verzi nainstalujte ručně přes Downloader jako `BezpecneVideo-TV-0.1.8.apk`. Další aktualizace už otevřou instalátor automaticky.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

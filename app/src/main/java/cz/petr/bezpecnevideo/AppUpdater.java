@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -28,6 +29,7 @@ final class AppUpdater {
     private final Activity activity;
     private long downloadId = -1;
     private BroadcastReceiver receiver;
+    private volatile boolean installerOpened;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
@@ -113,27 +115,62 @@ final class AppUpdater {
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
         request.setMimeType("application/vnd.android.package-archive");
         request.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, release.fileName);
+        installerOpened = false;
         downloadId = manager.enqueue(request);
         receiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 long completed = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
                 if (completed != downloadId) return;
-                try { activity.unregisterReceiver(this); } catch (Exception ignored) { }
-                Uri apk = manager.getUriForDownloadedFile(downloadId);
-                if (apk == null) {
-                    Toast.makeText(activity, "Stažení aktualizace se nezdařilo.", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                Intent install = new Intent(Intent.ACTION_VIEW);
-                install.setDataAndType(apk, "application/vnd.android.package-archive");
-                install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                activity.startActivity(install);
+                openInstaller(manager);
             }
         };
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= 33) activity.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        if (Build.VERSION.SDK_INT >= 33) activity.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
         else activity.registerReceiver(receiver, filter);
+        watchDownload(manager);
         Toast.makeText(activity, "Aktualizace se stahuje…", Toast.LENGTH_LONG).show();
+    }
+
+    private void watchDownload(DownloadManager manager) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            for (int attempt = 0; attempt < 180 && !installerOpened; attempt++) {
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) { return; }
+                DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+                try (Cursor cursor = manager.query(query)) {
+                    if (!cursor.moveToFirst()) continue;
+                    int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        activity.runOnUiThread(() -> openInstaller(manager));
+                        return;
+                    }
+                    if (status == DownloadManager.STATUS_FAILED) {
+                        activity.runOnUiThread(() -> Toast.makeText(activity,
+                                "Stažení aktualizace se nezdařilo.", Toast.LENGTH_LONG).show());
+                        return;
+                    }
+                } catch (Exception ignored) { }
+            }
+        });
+    }
+
+    private synchronized void openInstaller(DownloadManager manager) {
+        if (installerOpened) return;
+        Uri apk = manager.getUriForDownloadedFile(downloadId);
+        if (apk == null) {
+            Toast.makeText(activity, "Stažený instalační soubor nelze otevřít.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        installerOpened = true;
+        try { activity.unregisterReceiver(receiver); } catch (Exception ignored) { }
+        Intent install = new Intent(Intent.ACTION_VIEW);
+        install.setDataAndType(apk, "application/vnd.android.package-archive");
+        install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            activity.startActivity(install);
+        } catch (Exception exception) {
+            installerOpened = false;
+            Toast.makeText(activity, "Google TV nemůže otevřít instalátor APK.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private String currentVersion() {
