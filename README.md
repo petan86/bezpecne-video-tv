@@ -18,6 +18,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - domovská obrazovka inspirovaná ovládáním YouTube pro TV se čtyřmi náhledy v řadě,
 - přednastavený český kanál Tlapková patrola pro Filípka,
 - přednastavený kanál CrunchLabs pro Matýska,
+- přednastavený kanál Every Brick pro Matýska,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.

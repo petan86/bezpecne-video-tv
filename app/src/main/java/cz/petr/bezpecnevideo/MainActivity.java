@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private static final String SLIVKI_CHANNEL = "UCAugiH1MZcHcsbnWv31JrOg";
     private static final String PAW_PATROL_CZECH_CHANNEL = "UCSVSJ1OCSv5ClFgKFTHIDew";
     private static final String CRUNCHLABS_CHANNEL = "UCY1kMZp36IQSyNx_9h4mpCg";
+    private static final String EVERY_BRICK_CHANNEL = "UC_F-J5mjvV80iU9NVz32alg";
     private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
     private String activeProfile;
@@ -122,9 +123,10 @@ public final class MainActivity extends Activity {
         for (VideoStore.Video video : videos) displayed.add(video.id);
         int channelCount = store.channels(activeProfile).size();
         if (VideoStore.MATYSEK.equals(activeProfile)) {
-            channelCount += 2;
+            channelCount += 3;
             loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, grid, loading, displayed);
             loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs", content, grid, loading, displayed);
+            loadChannelFeed(EVERY_BRICK_CHANNEL, "Every Brick", content, grid, loading, displayed);
         }
         if (VideoStore.FILIPEK.equals(activeProfile)) {
             channelCount++;
@@ -173,6 +175,7 @@ public final class MainActivity extends Activity {
         if (VideoStore.MATYSEK.equals(activeProfile)) {
             row.addView(categoryChip("Toto je Slivki", false));
             row.addView(categoryChip("CrunchLabs", false));
+            row.addView(categoryChip("Every Brick", false));
         }
         if (VideoStore.FILIPEK.equals(activeProfile)) row.addView(categoryChip("Tlapková patrola", false));
         for (VideoStore.Channel channel : store.channels(activeProfile)) row.addView(categoryChip(channel.title, false));

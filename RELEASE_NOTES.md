@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.11 – CrunchLabs pro Matýska
+# Bezpečné video 0.1.12 – Every Brick pro Matýska
 
-Aktualizace přidává Matýskovi celý kanál CrunchLabs.
+Aktualizace přidává Matýskovi celý kanál Every Brick.
 
 ## Funkce
 
@@ -43,10 +43,13 @@ Aktualizace přidává Matýskovi celý kanál CrunchLabs.
 - automatické načítání nejnovějších videí z kanálu CrunchLabs,
 - samostatná kategorie CrunchLabs v Matýskově profilu,
 - budoucí videa CrunchLabs se zobrazí automaticky.
+- automatické načítání nejnovějších videí z kanálu Every Brick,
+- samostatná kategorie Every Brick v Matýskově profilu,
+- budoucí videa kanálu se zobrazí automaticky.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.11.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.12.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
