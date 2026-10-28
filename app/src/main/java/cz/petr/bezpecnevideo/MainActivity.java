@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.net.Uri;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -191,6 +192,11 @@ public final class MainActivity extends Activity {
         content.addView(title("Přidat povolené video", 25));
         content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.DKGRAY));
         content.addView(space(12));
+        Button search = button("🔎  Vyhledat video přímo na YouTube", Color.rgb(230, 33, 23));
+        search.setOnClickListener(v -> askSearchText());
+        content.addView(search, wide());
+        content.addView(text("Stačí napsat název videa; odkaz není potřeba opisovat.", 13, Color.GRAY));
+        content.addView(space(14));
         EditText url = input("Odkaz na YouTube video");
         EditText videoTitle = input("Název pro dítě");
         content.addView(url, wide());
@@ -224,6 +230,74 @@ public final class MainActivity extends Activity {
         pin.setOnClickListener(v -> changePin());
         content.addView(pin, wide());
         render(scroll(content));
+    }
+
+    private void askSearchText() {
+        EditText query = input("Co chcete na YouTube najít?");
+        new AlertDialog.Builder(this)
+                .setTitle("Vyhledat video")
+                .setView(query)
+                .setPositiveButton("Vyhledat", (dialog, which) -> {
+                    String value = query.getText().toString().trim();
+                    if (!value.isEmpty()) showYouTubeSearch(value);
+                })
+                .setNegativeButton("Zrušit", null)
+                .show();
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void showYouTubeSearch(String query) {
+        webView = configuredWebView();
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                String videoId = VideoStore.extractVideoId(url);
+                if (videoId != null) {
+                    String pageTitle = view.getTitle();
+                    approveSearchResult(videoId, cleanYouTubeTitle(pageTitle));
+                    return true;
+                }
+                return false;
+            }
+        });
+        String encoded = Uri.encode(query);
+        webView.loadUrl("https://m.youtube.com/results?search_query=" + encoded);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.WHITE);
+        shell.addView(header("Vyberte video", "Zpět", v -> closeSearch()), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        render(shell);
+    }
+
+    private void approveSearchResult(String videoId, String title) {
+        String safeTitle = title == null || title.isEmpty() ? "Povolené video" : title;
+        new AlertDialog.Builder(this)
+                .setTitle("Komu povolit video?")
+                .setMessage(safeTitle)
+                .setPositiveButton("Matýskovi", (dialog, which) -> saveSearchResult(VideoStore.MATYSEK, videoId, safeTitle))
+                .setNegativeButton("Filípkovi", (dialog, which) -> saveSearchResult(VideoStore.FILIPEK, videoId, safeTitle))
+                .setNeutralButton("Zrušit", null)
+                .show();
+    }
+
+    private void saveSearchResult(String profile, String videoId, String title) {
+        store.addVideo(profile, videoId, title);
+        Toast.makeText(this, "Video bylo povoleno", Toast.LENGTH_SHORT).show();
+    }
+
+    private String cleanYouTubeTitle(String title) {
+        if (title == null) return "Povolené video";
+        return title.replace(" - YouTube", "").trim();
+    }
+
+    private void closeSearch() {
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        showParentArea();
     }
 
     private void addManagementList(LinearLayout content, String profile, String name) {

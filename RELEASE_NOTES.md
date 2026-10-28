@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.1 – kanál Toto je Slivki
+# Bezpečné video 0.1.2 – vyhledávání v rodičovské správě
 
-Aktualizace pro Chromecast s Google TV přidává Matýskovi povolený kanál Toto je Slivki.
+Aktualizace pro Chromecast s Google TV přidává pohodlné vyhledávání videí přímo v rodičovské správě.
 
 ## Funkce
 
@@ -12,10 +12,12 @@ Aktualizace pro Chromecast s Google TV přidává Matýskovi povolený kanál To
 - vložený oficiální YouTube přehrávač,
 - testovací obrazovka pro přihlášení k YouTube Premium.
 - dynamický seznam nahraných videí kanálu Toto je Slivki v profilu Matýsek.
+- vyhledání videa podle názvu bez opisování YouTube odkazu,
+- povolení vybraného výsledku Matýskovi nebo Filípkovi jedním potvrzením.
 
 ## Instalace
 
-Stáhněte soubor `BezpecneVideo-TV-0.1.1.apk` a nainstalujte ho do Chromecastu s Google TV. Aktualizaci lze nainstalovat přes stávající verzi.
+Stáhněte soubor `BezpecneVideo-TV-0.1.2.apk` a nainstalujte ho do Chromecastu s Google TV. Aktualizaci lze nainstalovat přes stávající verzi.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
