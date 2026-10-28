@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -263,6 +264,7 @@ public final class MainActivity extends Activity {
     private void showYouTubeSearch(String query) {
         searchChoiceOpen = false;
         webView = configuredWebView();
+        webView.addJavascriptInterface(new ParentSearchBridge(), "BezpecneVideo");
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleSearchNavigation(request.getUrl().toString(), view.getTitle());
@@ -273,15 +275,57 @@ public final class MainActivity extends Activity {
             @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
                 handleSearchNavigation(url, view.getTitle());
             }
+            @Override public void onPageFinished(WebView view, String url) {
+                injectTvSelection(view);
+            }
         });
         String encoded = Uri.encode(query);
         webView.loadUrl("https://m.youtube.com/results?search_query=" + encoded);
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.WHITE);
-        shell.addView(header("Vyberte video", "Zpět", v -> closeSearch()), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(header("Šipkami označte video a stiskněte OK", "Zpět", v -> closeSearch()), new LinearLayout.LayoutParams(-1, dp(64)));
         shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         render(shell);
+        webView.requestFocus();
+    }
+
+    private void injectTvSelection(WebView view) {
+        String script = "(function(){" +
+                "if(window.__bezpecneVideoInstalled)return;window.__bezpecneVideoInstalled=true;" +
+                "var style=document.createElement('style');" +
+                "style.textContent='a[data-bv-selectable=true]{display:block!important} a[data-bv-selectable=true]:focus{outline:7px solid #FCA311!important;outline-offset:3px!important;background:#FFF0C7!important;border-radius:8px!important}';" +
+                "document.head.appendChild(style);" +
+                "function label(a){var n=a.querySelector(\"#video-title,yt-formatted-string,h3,[aria-label]\");return ((n&&(n.textContent||n.getAttribute('aria-label')))||a.textContent||'Povolené video').trim().substring(0,180);}" +
+                "function bind(){document.querySelectorAll('a[href]').forEach(function(a){" +
+                "var h=a.getAttribute('href')||'';var video=h.indexOf('/watch')>=0&&h.indexOf('v=')>=0;var channel=h.indexOf('/channel/UC')>=0||h.indexOf('/@')===0;" +
+                "if((!video&&!channel)||a.dataset.bvBound)return;a.dataset.bvBound='1';a.dataset.bvSelectable='true';a.tabIndex=0;" +
+                "a.addEventListener('click',function(e){var u=new URL(a.href,location.href);" +
+                "if(video){var id=u.searchParams.get('v');if(id){e.preventDefault();e.stopImmediatePropagation();BezpecneVideo.video(id,label(a));}}" +
+                "else{e.preventDefault();e.stopImmediatePropagation();BezpecneVideo.channel(u.href,label(a));}},true);" +
+                "});}" +
+                "bind();new MutationObserver(bind).observe(document.documentElement,{childList:true,subtree:true});" +
+                "setTimeout(function(){var first=document.querySelector('a[data-bv-selectable=true]');if(first)first.focus();},900);" +
+                "})();";
+        view.evaluateJavascript(script, null);
+    }
+
+    private final class ParentSearchBridge {
+        @JavascriptInterface public void video(String videoId, String title) {
+            runOnUiThread(() -> {
+                if (searchChoiceOpen) return;
+                searchChoiceOpen = true;
+                approveSearchResult(videoId, cleanYouTubeTitle(title));
+            });
+        }
+
+        @JavascriptInterface public void channel(String url, String title) {
+            runOnUiThread(() -> {
+                if (searchChoiceOpen) return;
+                searchChoiceOpen = true;
+                resolveAndApproveChannel(url, cleanYouTubeTitle(title));
+            });
+        }
     }
 
     private boolean handleSearchNavigation(String url, String pageTitle) {

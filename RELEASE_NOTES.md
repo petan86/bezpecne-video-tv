@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.4 – oprava výběru videí a celé kanály
+# Bezpečné video 0.1.5 – televizní označení výsledku
 
-Aktualizace opravuje výběr výsledku v rodičovském vyhledávání a přidává povolení celého kanálu.
+Aktualizace přidává výběr výsledků navržený přímo pro dálkový ovladač Google TV.
 
 ## Funkce
 
@@ -19,10 +19,13 @@ Aktualizace opravuje výběr výsledku v rodičovském vyhledávání a přidáv
 - spolehlivé zachycení videa při navigaci uvnitř mobilního YouTube,
 - povolení celého kanálu Matýskovi nebo Filípkovi,
 - automatické zpřístupnění budoucích videí z povoleného kanálu.
+- výrazný žlutý rámeček kolem výsledku vybraného šipkami,
+- označení videa nebo kanálu tlačítkem OK,
+- přímé předání výběru z YouTube stránky do rodičovské správy.
 
 ## Instalace
 
-Ve verzi 0.1.3 otevřete rodičovskou správu a použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.4.apk` ručně.
+V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.5.apk` ručně.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
