@@ -18,11 +18,14 @@ final class VideoStore {
     static final String MATYSEK = "matysek";
     static final String FILIPEK = "filipek";
     private static final String DEFAULT_PIN = "2468";
+    private static final String BLOCKED_BEAST_BUILDERS_CZ = "UC5YN3TtZQJ8HMMT3PuJydnA";
     private final SharedPreferences prefs;
 
     VideoStore(Context context) {
         prefs = context.getSharedPreferences("rodicovska_sprava", Context.MODE_PRIVATE);
         if (!prefs.contains("pin_hash")) setPin(DEFAULT_PIN);
+        removeChannel(MATYSEK, BLOCKED_BEAST_BUILDERS_CZ);
+        removeChannel(FILIPEK, BLOCKED_BEAST_BUILDERS_CZ);
     }
 
     List<Video> videos(String profile) {
@@ -67,6 +70,7 @@ final class VideoStore {
 
     void addChannel(String profile, String channelId, String title) {
         if (channelId == null || !channelId.matches("UC[A-Za-z0-9_-]{22}")) return;
+        if (BLOCKED_BEAST_BUILDERS_CZ.equals(channelId)) return;
         List<Channel> current = channels(profile);
         for (Channel channel : current) if (channel.id.equals(channelId)) return;
         current.add(new Channel(channelId, title == null || title.trim().isEmpty() ? "Povolený kanál" : title.trim()));
