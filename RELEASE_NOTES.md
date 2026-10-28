@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.16 – česká videa jako první
+# Bezpečné video 0.1.17 – rychlejší načítání a přehrávání
 
-Aktualizace upřednostňuje česká videa v dětské galerii.
+Aktualizace zkracuje čekání před spuštěním videa a zrychluje načítání galerie.
 
 ## Funkce
 
@@ -58,10 +58,15 @@ Aktualizace upřednostňuje česká videa v dětské galerii.
 - české kanály se v kategorii Vše zobrazují před anglickými,
 - ručně povolená videa zůstávají nahoře,
 - pořadí se nemění podle rychlosti načtení jednotlivých kanálů.
+- předběžné zahřátí WebView a spojení se službou YouTube,
+- hardwarově akcelerované vykreslování přehrávače,
+- standardní webová cache a DOM úložiště,
+- paralelní načítání obrázkových náhledů,
+- původní optimalizovaný identifikátor Android WebView bez vlastní přípony.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.16.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.17.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

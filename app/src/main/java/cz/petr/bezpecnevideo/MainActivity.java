@@ -16,6 +16,7 @@ import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
@@ -68,7 +69,23 @@ public final class MainActivity extends Activity {
         store = new VideoStore(this);
         root = new FrameLayout(this);
         setContentView(root);
+        warmUpYouTube();
         showProfilePicker();
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void warmUpYouTube() {
+        WebView warmup = new WebView(this);
+        warmup.getSettings().setJavaScriptEnabled(true);
+        warmup.getSettings().setDomStorageEnabled(true);
+        warmup.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+        warmup.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                view.stopLoading();
+                view.destroy();
+            }
+        });
+        warmup.loadUrl("https://www.youtube.com/generate_204");
     }
 
     private void showProfilePicker() {
@@ -341,7 +358,8 @@ public final class MainActivity extends Activity {
         thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
         thumbnail.setBackgroundColor(Color.LTGRAY);
         thumbnail.setContentDescription("Náhled videa " + video.title);
-        new ThumbnailLoader(thumbnail).execute("https://i.ytimg.com/vi/" + video.id + "/hqdefault.jpg");
+        new ThumbnailLoader(thumbnail).executeOnExecutor(android.os.AsyncTask.THREAD_POOL_EXECUTOR,
+                "https://i.ytimg.com/vi/" + video.id + "/hqdefault.jpg");
         int imageHeight = Math.round((getResources().getDisplayMetrics().widthPixels / 4f - dp(26)) * 9f / 16f);
         card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
         String[] parts = video.title.split("  •  ", 2);
@@ -666,8 +684,11 @@ public final class MainActivity extends Activity {
         WebView view = new WebView(this);
         view.getSettings().setJavaScriptEnabled(true);
         view.getSettings().setDomStorageEnabled(true);
+        view.getSettings().setDatabaseEnabled(true);
+        view.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
         view.getSettings().setMediaPlaybackRequiresUserGesture(false);
-        view.getSettings().setUserAgentString(view.getSettings().getUserAgentString() + " BezpecneVideo/0.1");
+        view.getSettings().setOffscreenPreRaster(true);
+        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) { return false; }
