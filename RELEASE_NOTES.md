@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.8 – opravené otevření instalace
+# Bezpečné video 0.1.9 – přehrávač přes celou obrazovku
 
-Aktualizace opravuje situaci, kdy se nová verze stáhla, ale Google TV neotevřela systémovou instalaci.
+Aktualizace opravuje přehrávač, který se zobrazoval pouze v horní části televizní obrazovky.
 
 ## Funkce
 
@@ -34,10 +34,13 @@ Aktualizace opravuje situaci, kdy se nová verze stáhla, ale Google TV neotevř
 - správný příjem oznámení správce stahování na nových verzích Google TV,
 - záložní kontrola stavu stahování každou sekundu,
 - automatické otevření systémového instalátoru po úspěšném stažení.
+- YouTube přehrávač využívá celou dostupnou šířku a výšku,
+- oprava platí pro jednotlivá videa i seznam videí kanálu,
+- odstranění prázdné černé plochy pod videem.
 
 ## Instalace
 
-Tuto opravnou verzi nainstalujte ručně přes Downloader jako `BezpecneVideo-TV-0.1.8.apk`. Další aktualizace už otevřou instalátor automaticky.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.9.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

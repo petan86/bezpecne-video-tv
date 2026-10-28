@@ -261,15 +261,15 @@ public final class MainActivity extends Activity {
     private void playChannel(String channelTitle, String uploadsPlaylist) {
         webView = configuredWebView();
         String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
-                "<body style='margin:0;background:#000'><iframe width='100%' height='100%' " +
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
+                "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
+                "<body><iframe " +
                 "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0' " +
                 "title='" + channelTitle.replace("'", "") + "' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
-        shell.addView(header("←  " + channelTitle, "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
         shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         render(shell);
     }
@@ -310,15 +310,15 @@ public final class MainActivity extends Activity {
     private void play(VideoStore.Video video) {
         webView = configuredWebView();
         String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
-                "<body style='margin:0;background:#000'><iframe width='100%' height='100%' " +
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
+                "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
+                "<body><iframe " +
                 "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0' " +
                 "title='YouTube video player' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
-        shell.addView(header("←  " + video.title, "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
         shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         render(shell);
     }
