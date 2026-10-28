@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.9 – přehrávač přes celou obrazovku
+# Bezpečné video 0.1.10 – Tlapková patrola pro Filípka
 
-Aktualizace opravuje přehrávač, který se zobrazoval pouze v horní části televizní obrazovky.
+Aktualizace přidává Filípkovi český kanál Tlapková patrola.
 
 ## Funkce
 
@@ -37,10 +37,13 @@ Aktualizace opravuje přehrávač, který se zobrazoval pouze v horní části t
 - YouTube přehrávač využívá celou dostupnou šířku a výšku,
 - oprava platí pro jednotlivá videa i seznam videí kanálu,
 - odstranění prázdné černé plochy pod videem.
+- automatické načítání nejnovějších videí z kanálu PAW Patrol Czech,
+- samostatná kategorie Tlapková patrola ve Filípkově profilu,
+- nová videa kanálu se zobrazí bez další aktualizace aplikace.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.9.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.10.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

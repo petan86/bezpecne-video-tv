@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
     private static final int DARK = Color.rgb(14, 16, 21);
     private static final int SURFACE = Color.rgb(28, 31, 38);
     private static final String SLIVKI_CHANNEL = "UCAugiH1MZcHcsbnWv31JrOg";
+    private static final String PAW_PATROL_CZECH_CHANNEL = "UCSVSJ1OCSv5ClFgKFTHIDew";
     private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
     private String activeProfile;
@@ -123,6 +124,10 @@ public final class MainActivity extends Activity {
             channelCount++;
             loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, grid, loading, displayed);
         }
+        if (VideoStore.FILIPEK.equals(activeProfile)) {
+            channelCount++;
+            loadChannelFeed(PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky", content, grid, loading, displayed);
+        }
         for (VideoStore.Channel channel : store.channels(activeProfile))
             loadChannelFeed(channel.id, channel.title, content, grid, loading, displayed);
         if (channelCount == 0) {
@@ -164,6 +169,7 @@ public final class MainActivity extends Activity {
         TextView all = categoryChip("Vše", true);
         row.addView(all);
         if (VideoStore.MATYSEK.equals(activeProfile)) row.addView(categoryChip("Toto je Slivki", false));
+        if (VideoStore.FILIPEK.equals(activeProfile)) row.addView(categoryChip("Tlapková patrola", false));
         for (VideoStore.Channel channel : store.channels(activeProfile)) row.addView(categoryChip(channel.title, false));
         return row;
     }
