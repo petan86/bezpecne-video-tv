@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.3 – aktualizace jedním tlačítkem
+# Bezpečné video 0.1.4 – oprava výběru videí a celé kanály
 
-Aktualizace pro Chromecast s Google TV přidává kontrolu a instalaci nových verzí přímo z rodičovské správy.
+Aktualizace opravuje výběr výsledku v rodičovském vyhledávání a přidává povolení celého kanálu.
 
 ## Funkce
 
@@ -16,10 +16,13 @@ Aktualizace pro Chromecast s Google TV přidává kontrolu a instalaci nových v
 - povolení vybraného výsledku Matýskovi nebo Filípkovi jedním potvrzením.
 - kontrola nejnovější verze na GitHubu,
 - automatické stažení APK a otevření systémové instalace.
+- spolehlivé zachycení videa při navigaci uvnitř mobilního YouTube,
+- povolení celého kanálu Matýskovi nebo Filípkovi,
+- automatické zpřístupnění budoucích videí z povoleného kanálu.
 
 ## Instalace
 
-Stáhněte soubor `BezpecneVideo-TV-0.1.3.apk` a nainstalujte ho do Chromecastu s Google TV. Další verze už půjde kontrolovat z rodičovské správy.
+Ve verzi 0.1.3 otevřete rodičovskou správu a použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.4.apk` ručně.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

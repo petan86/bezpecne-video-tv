@@ -12,6 +12,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - televizní launcher, landscape rozhraní a ovládání dálkovým ovladačem,
 - přednastavený povolený kanál Toto je Slivki pro Matýska,
 - vyhledávání videí přímo z rodičovské správy bez opisování odkazu,
+- povolení jednotlivého videa nebo celého kanálu přímo z výsledků vyhledávání,
 - kontrola, stažení a spuštění aktualizace přímo z rodičovské správy,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 

@@ -25,7 +25,14 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
     private static final int NAVY = Color.rgb(20, 33, 61);
@@ -38,6 +45,7 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    private boolean searchChoiceOpen;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -84,9 +92,10 @@ public final class MainActivity extends Activity {
         content.addView(header(profileName(), "Přepnout", v -> showProfilePicker()));
         content.addView(title("Moje povolená videa", 25));
         content.addView(space(12));
-        if (VideoStore.MATYSEK.equals(activeProfile)) {
-            content.addView(channelCard());
-        }
+        if (VideoStore.MATYSEK.equals(activeProfile))
+            content.addView(channelCard("Toto je Slivki", SLIVKI_UPLOADS));
+        for (VideoStore.Channel channel : store.channels(activeProfile))
+            content.addView(channelCard(channel.title, channel.uploadsPlaylist()));
         if (videos.isEmpty() && !VideoStore.MATYSEK.equals(activeProfile)) {
             TextView empty = text("Rodič zatím nepřidal žádné video.", 18, Color.DKGRAY);
             empty.setGravity(Gravity.CENTER);
@@ -97,7 +106,7 @@ public final class MainActivity extends Activity {
         render(scroll(content));
     }
 
-    private View channelCard() {
+    private View channelCard(String channelTitle, String uploadsPlaylist) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
@@ -105,13 +114,13 @@ public final class MainActivity extends Activity {
         card.setBackgroundColor(Color.rgb(230, 33, 23));
         TextView icon = text("▶", 38, Color.WHITE);
         icon.setGravity(Gravity.CENTER);
-        TextView labels = text("Toto je Slivki\nVšechna videa z povoleného kanálu", 20, Color.WHITE);
+        TextView labels = text(channelTitle + "\nVšechna videa z povoleného kanálu", 20, Color.WHITE);
         labels.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         card.addView(icon, new LinearLayout.LayoutParams(dp(80), dp(80)));
         card.addView(labels, new LinearLayout.LayoutParams(0, dp(90), 1));
         card.setFocusable(true);
-        card.setContentDescription("Otevřít povolený kanál Toto je Slivki");
-        card.setOnClickListener(v -> playChannel());
+        card.setContentDescription("Otevřít povolený kanál " + channelTitle);
+        card.setOnClickListener(v -> playChannel(channelTitle, uploadsPlaylist));
         card.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start());
         LinearLayout.LayoutParams params = wide();
         params.setMargins(0, 0, 0, dp(18));
@@ -121,18 +130,18 @@ public final class MainActivity extends Activity {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private void playChannel() {
+    private void playChannel(String channelTitle, String uploadsPlaylist) {
         webView = configuredWebView();
         String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
                 "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
                 "<body style='margin:0;background:#000'><iframe width='100%' height='100%' " +
-                "src='https://www.youtube.com/embed/videoseries?list=" + SLIVKI_UPLOADS + "&autoplay=1&playsinline=1&rel=0' " +
-                "title='Toto je Slivki' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
+                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0' " +
+                "title='" + channelTitle.replace("'", "") + "' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
-        shell.addView(header("←  Toto je Slivki", "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(header("←  " + channelTitle, "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
         shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         render(shell);
     }
@@ -252,17 +261,17 @@ public final class MainActivity extends Activity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void showYouTubeSearch(String query) {
+        searchChoiceOpen = false;
         webView = configuredWebView();
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                String videoId = VideoStore.extractVideoId(url);
-                if (videoId != null) {
-                    String pageTitle = view.getTitle();
-                    approveSearchResult(videoId, cleanYouTubeTitle(pageTitle));
-                    return true;
-                }
-                return false;
+                return handleSearchNavigation(request.getUrl().toString(), view.getTitle());
+            }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                if (handleSearchNavigation(url, view.getTitle())) view.stopLoading();
+            }
+            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                handleSearchNavigation(url, view.getTitle());
             }
         });
         String encoded = Uri.encode(query);
@@ -275,6 +284,22 @@ public final class MainActivity extends Activity {
         render(shell);
     }
 
+    private boolean handleSearchNavigation(String url, String pageTitle) {
+        if (url == null || searchChoiceOpen) return false;
+        String videoId = VideoStore.extractVideoId(url);
+        if (videoId != null) {
+            searchChoiceOpen = true;
+            approveSearchResult(videoId, cleanYouTubeTitle(pageTitle));
+            return true;
+        }
+        if (url.contains("youtube.com/channel/UC") || url.contains("youtube.com/@")) {
+            searchChoiceOpen = true;
+            resolveAndApproveChannel(url, cleanYouTubeTitle(pageTitle));
+            return true;
+        }
+        return false;
+    }
+
     private void approveSearchResult(String videoId, String title) {
         String safeTitle = title == null || title.isEmpty() ? "Povolené video" : title;
         new AlertDialog.Builder(this)
@@ -282,13 +307,71 @@ public final class MainActivity extends Activity {
                 .setMessage(safeTitle)
                 .setPositiveButton("Matýskovi", (dialog, which) -> saveSearchResult(VideoStore.MATYSEK, videoId, safeTitle))
                 .setNegativeButton("Filípkovi", (dialog, which) -> saveSearchResult(VideoStore.FILIPEK, videoId, safeTitle))
-                .setNeutralButton("Zrušit", null)
+                .setNeutralButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
+                .setOnCancelListener(dialog -> searchChoiceOpen = false)
                 .show();
     }
 
     private void saveSearchResult(String profile, String videoId, String title) {
         store.addVideo(profile, videoId, title);
         Toast.makeText(this, "Video bylo povoleno", Toast.LENGTH_SHORT).show();
+        searchChoiceOpen = false;
+    }
+
+    private void resolveAndApproveChannel(String channelUrl, String visibleTitle) {
+        Toast.makeText(this, "Načítám kanál…", Toast.LENGTH_SHORT).show();
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String channelId = directChannelId(channelUrl);
+                String channelTitle = visibleTitle;
+                if (channelId == null) {
+                    HttpURLConnection connection = (HttpURLConnection) new URL(channelUrl).openConnection();
+                    connection.setConnectTimeout(10000);
+                    connection.setReadTimeout(10000);
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android TV) BezpecneVideo/0.1");
+                    StringBuilder html = new StringBuilder();
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) html.append(line);
+                    }
+                    Matcher idMatcher = Pattern.compile("\\\"channelId\\\":\\\"(UC[A-Za-z0-9_-]{22})\\\"").matcher(html);
+                    if (idMatcher.find()) channelId = idMatcher.group(1);
+                    Matcher titleMatcher = Pattern.compile("<meta property=\\\"og:title\\\" content=\\\"([^\\\"]+)\\\"").matcher(html);
+                    if (titleMatcher.find()) channelTitle = titleMatcher.group(1);
+                }
+                if (channelId == null) throw new IllegalStateException("ID kanálu nebylo nalezeno");
+                String finalId = channelId;
+                String finalTitle = channelTitle == null || channelTitle.isEmpty() ? "Povolený kanál" : channelTitle;
+                runOnUiThread(() -> approveChannel(finalId, finalTitle));
+            } catch (Exception exception) {
+                runOnUiThread(() -> {
+                    searchChoiceOpen = false;
+                    Toast.makeText(this, "Kanál se nepodařilo načíst.", Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void approveChannel(String channelId, String title) {
+        new AlertDialog.Builder(this)
+                .setTitle("Komu povolit celý kanál?")
+                .setMessage(title + "\n\nPovolena budou i nová videa přidaná v budoucnu.")
+                .setPositiveButton("Matýskovi", (dialog, which) -> saveChannel(VideoStore.MATYSEK, channelId, title))
+                .setNegativeButton("Filípkovi", (dialog, which) -> saveChannel(VideoStore.FILIPEK, channelId, title))
+                .setNeutralButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
+                .setOnCancelListener(dialog -> searchChoiceOpen = false)
+                .show();
+    }
+
+    private void saveChannel(String profile, String channelId, String title) {
+        store.addChannel(profile, channelId, title);
+        searchChoiceOpen = false;
+        Toast.makeText(this, "Celý kanál byl povolen", Toast.LENGTH_SHORT).show();
+    }
+
+    private String directChannelId(String url) {
+        Matcher matcher = Pattern.compile("/channel/(UC[A-Za-z0-9_-]{22})").matcher(url);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private String cleanYouTubeTitle(String title) {
@@ -315,6 +398,16 @@ public final class MainActivity extends Activity {
             TextView label = text(video.title, 16, NAVY);
             Button remove = button("Odebrat", Color.rgb(180, 48, 48));
             remove.setOnClickListener(v -> { store.removeVideo(profile, video.id); showParentArea(); });
+            row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1));
+            row.addView(remove, new LinearLayout.LayoutParams(dp(110), dp(48)));
+            content.addView(row, wide());
+        }
+        for (VideoStore.Channel channel : store.channels(profile)) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label = text("Kanál: " + channel.title, 16, NAVY);
+            Button remove = button("Odebrat", Color.rgb(180, 48, 48));
+            remove.setOnClickListener(v -> { store.removeChannel(profile, channel.id); showParentArea(); });
             row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1));
             row.addView(remove, new LinearLayout.LayoutParams(dp(110), dp(48)));
             content.addView(row, wide());

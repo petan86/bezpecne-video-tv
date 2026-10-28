@@ -37,6 +37,18 @@ final class VideoStore {
         return result;
     }
 
+    List<Channel> channels(String profile) {
+        List<Channel> result = new ArrayList<>();
+        try {
+            JSONArray values = new JSONArray(prefs.getString("channels_" + profile, "[]"));
+            for (int i = 0; i < values.length(); i++) {
+                JSONObject item = values.getJSONObject(i);
+                result.add(new Channel(item.getString("id"), item.optString("title", "Povolený kanál")));
+            }
+        } catch (JSONException ignored) { }
+        return result;
+    }
+
     boolean addVideo(String profile, String url, String title) {
         String id = extractVideoId(url);
         if (id == null) return false;
@@ -51,6 +63,20 @@ final class VideoStore {
         List<Video> current = videos(profile);
         current.removeIf(video -> video.id.equals(id));
         save(profile, current);
+    }
+
+    void addChannel(String profile, String channelId, String title) {
+        if (channelId == null || !channelId.matches("UC[A-Za-z0-9_-]{22}")) return;
+        List<Channel> current = channels(profile);
+        for (Channel channel : current) if (channel.id.equals(channelId)) return;
+        current.add(new Channel(channelId, title == null || title.trim().isEmpty() ? "Povolený kanál" : title.trim()));
+        saveChannels(profile, current);
+    }
+
+    void removeChannel(String profile, String channelId) {
+        List<Channel> current = channels(profile);
+        current.removeIf(channel -> channel.id.equals(channelId));
+        saveChannels(profile, current);
     }
 
     boolean checkPin(String pin) {
@@ -76,6 +102,19 @@ final class VideoStore {
             } catch (JSONException ignored) { }
         }
         prefs.edit().putString("videos_" + profile, values.toString()).apply();
+    }
+
+    private void saveChannels(String profile, List<Channel> channels) {
+        JSONArray values = new JSONArray();
+        for (Channel channel : channels) {
+            JSONObject item = new JSONObject();
+            try {
+                item.put("id", channel.id);
+                item.put("title", channel.title);
+                values.put(item);
+            } catch (JSONException ignored) { }
+        }
+        prefs.edit().putString("channels_" + profile, values.toString()).apply();
     }
 
     static String extractVideoId(String value) {
@@ -113,5 +152,12 @@ final class VideoStore {
         final String id;
         final String title;
         Video(String id, String title) { this.id = id; this.title = title; }
+    }
+
+    static final class Channel {
+        final String id;
+        final String title;
+        Channel(String id, String title) { this.id = id; this.title = title; }
+        String uploadsPlaylist() { return "UU" + id.substring(2); }
     }
 }
