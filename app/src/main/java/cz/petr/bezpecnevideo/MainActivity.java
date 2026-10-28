@@ -30,6 +30,7 @@ public final class MainActivity extends Activity {
     private static final int NAVY = Color.rgb(20, 33, 61);
     private static final int ORANGE = Color.rgb(252, 163, 17);
     private static final int CREAM = Color.rgb(255, 248, 236);
+    private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
     private String activeProfile;
     private WebView webView;
@@ -82,7 +83,10 @@ public final class MainActivity extends Activity {
         content.addView(header(profileName(), "Přepnout", v -> showProfilePicker()));
         content.addView(title("Moje povolená videa", 25));
         content.addView(space(12));
-        if (videos.isEmpty()) {
+        if (VideoStore.MATYSEK.equals(activeProfile)) {
+            content.addView(channelCard());
+        }
+        if (videos.isEmpty() && !VideoStore.MATYSEK.equals(activeProfile)) {
             TextView empty = text("Rodič zatím nepřidal žádné video.", 18, Color.DKGRAY);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(70), 0, dp(70));
@@ -90,6 +94,46 @@ public final class MainActivity extends Activity {
         }
         for (VideoStore.Video video : videos) content.addView(videoCard(video));
         render(scroll(content));
+    }
+
+    private View channelCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(24), dp(18), dp(24), dp(18));
+        card.setBackgroundColor(Color.rgb(230, 33, 23));
+        TextView icon = text("▶", 38, Color.WHITE);
+        icon.setGravity(Gravity.CENTER);
+        TextView labels = text("Toto je Slivki\nVšechna videa z povoleného kanálu", 20, Color.WHITE);
+        labels.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        card.addView(icon, new LinearLayout.LayoutParams(dp(80), dp(80)));
+        card.addView(labels, new LinearLayout.LayoutParams(0, dp(90), 1));
+        card.setFocusable(true);
+        card.setContentDescription("Otevřít povolený kanál Toto je Slivki");
+        card.setOnClickListener(v -> playChannel());
+        card.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start());
+        LinearLayout.LayoutParams params = wide();
+        params.setMargins(0, 0, 0, dp(18));
+        card.setLayoutParams(params);
+        card.setElevation(dp(4));
+        return card;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void playChannel() {
+        webView = configuredWebView();
+        String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
+                "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
+                "<body style='margin:0;background:#000'><iframe width='100%' height='100%' " +
+                "src='https://www.youtube.com/embed/videoseries?list=" + SLIVKI_UPLOADS + "&autoplay=1&playsinline=1&rel=0' " +
+                "title='Toto je Slivki' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
+        webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.BLACK);
+        shell.addView(header("←  Toto je Slivki", "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        render(shell);
     }
 
     private View videoCard(VideoStore.Video video) {
