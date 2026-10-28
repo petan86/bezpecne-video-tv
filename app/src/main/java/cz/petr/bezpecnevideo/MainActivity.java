@@ -121,6 +121,15 @@ public final class MainActivity extends Activity {
 
     private void showLibrary() {
         List<VideoStore.Video> videos = activeChannelFilter == null ? store.videos(activeProfile) : new ArrayList<>();
+        if (VideoStore.MATYSEK.equals(activeProfile)
+                && (activeChannelFilter == null || CRUNCHLABS_CHANNEL.equals(activeChannelFilter))) {
+            boolean alreadyAdded = false;
+            for (VideoStore.Video video : videos) {
+                if ("16LuvR2CARA".equals(video.id)) { alreadyAdded = true; break; }
+            }
+            if (!alreadyAdded) videos.add(new VideoStore.Video("16LuvR2CARA",
+                    "Inside Disney’s Secret Engineering Lab  •  CrunchLabs – český dabing"));
+        }
         LinearLayout content = page();
         content.addView(tvHomeHeader());
         content.addView(space(12));
