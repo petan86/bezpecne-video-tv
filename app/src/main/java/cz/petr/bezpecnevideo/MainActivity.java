@@ -25,12 +25,18 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Xml;
+
+import org.xmlpull.v1.XmlPullParser;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,7 +44,9 @@ import java.util.regex.Pattern;
 public final class MainActivity extends Activity {
     private static final int NAVY = Color.rgb(20, 33, 61);
     private static final int ORANGE = Color.rgb(252, 163, 17);
-    private static final int CREAM = Color.rgb(255, 248, 236);
+    private static final int DARK = Color.rgb(14, 16, 21);
+    private static final int SURFACE = Color.rgb(28, 31, 38);
+    private static final String SLIVKI_CHANNEL = "UCAugiH1MZcHcsbnWv31JrOg";
     private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
     private String activeProfile;
@@ -91,20 +99,71 @@ public final class MainActivity extends Activity {
         List<VideoStore.Video> videos = store.videos(activeProfile);
         LinearLayout content = page();
         content.addView(header(profileName(), "Přepnout", v -> showProfilePicker()));
-        content.addView(title("Moje povolená videa", 25));
+        content.addView(title("Vyber si video", 27));
         content.addView(space(12));
-        if (VideoStore.MATYSEK.equals(activeProfile))
-            content.addView(channelCard("Toto je Slivki", SLIVKI_UPLOADS));
-        for (VideoStore.Channel channel : store.channels(activeProfile))
-            content.addView(channelCard(channel.title, channel.uploadsPlaylist()));
-        if (videos.isEmpty() && !VideoStore.MATYSEK.equals(activeProfile)) {
-            TextView empty = text("Rodič zatím nepřidal žádné video.", 18, Color.DKGRAY);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, dp(70), 0, dp(70));
-            content.addView(empty, wide());
-        }
         for (VideoStore.Video video : videos) content.addView(videoCard(video));
+        TextView loading = text("Načítám náhledy z povolených kanálů…", 17, Color.LTGRAY);
+        loading.setPadding(0, dp(24), 0, dp(24));
+        content.addView(loading, wide());
         render(scroll(content));
+        Set<String> displayed = new HashSet<>();
+        for (VideoStore.Video video : videos) displayed.add(video.id);
+        int channelCount = store.channels(activeProfile).size();
+        if (VideoStore.MATYSEK.equals(activeProfile)) {
+            channelCount++;
+            loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, loading, displayed);
+        }
+        for (VideoStore.Channel channel : store.channels(activeProfile))
+            loadChannelFeed(channel.id, channel.title, content, loading, displayed);
+        if (channelCount == 0) {
+            content.removeView(loading);
+            if (videos.isEmpty()) {
+                TextView empty = text("Rodič zatím nepřidal žádné video.", 18, Color.LTGRAY);
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, dp(70), 0, dp(70));
+                content.addView(empty, wide());
+            }
+        }
+    }
+
+    private void loadChannelFeed(String channelId, String channelTitle, LinearLayout content,
+                                 TextView loading, Set<String> displayed) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            List<VideoStore.Video> found = new ArrayList<>();
+            try {
+                URL url = new URL("https://www.youtube.com/feeds/videos.xml?channel_id=" + channelId);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                connection.setRequestProperty("User-Agent", "BezpecneVideo-TV");
+                XmlPullParser parser = Xml.newPullParser();
+                parser.setInput(connection.getInputStream(), "UTF-8");
+                boolean inEntry = false;
+                String videoId = null;
+                String videoTitle = null;
+                int event;
+                while ((event = parser.next()) != XmlPullParser.END_DOCUMENT) {
+                    String name = parser.getName();
+                    if (event == XmlPullParser.START_TAG && "entry".equals(name)) inEntry = true;
+                    else if (event == XmlPullParser.START_TAG && inEntry && "videoId".equals(name)) videoId = parser.nextText();
+                    else if (event == XmlPullParser.START_TAG && inEntry && "title".equals(name)) videoTitle = parser.nextText();
+                    else if (event == XmlPullParser.END_TAG && "entry".equals(name)) {
+                        if (videoId != null) found.add(new VideoStore.Video(videoId,
+                                (videoTitle == null ? "Video" : videoTitle) + "  •  " + channelTitle));
+                        inEntry = false; videoId = null; videoTitle = null;
+                    }
+                }
+            } catch (Exception ignored) { }
+            runOnUiThread(() -> {
+                if (content.getParent() == null) return;
+                for (VideoStore.Video video : found) {
+                    if (displayed.add(video.id)) content.addView(videoCard(video), content.indexOfChild(loading));
+                }
+                if (loading.getParent() == content) content.removeView(loading);
+                if (found.isEmpty() && content.getChildCount() <= 3)
+                    content.addView(text("Náhledy kanálu se nepodařilo načíst. Zkontrolujte internet.", 16, Color.LTGRAY), wide());
+            });
+        });
     }
 
     private View channelCard(String channelTitle, String uploadsPlaylist) {
@@ -160,12 +219,12 @@ public final class MainActivity extends Activity {
         TextView label = title("▶  " + video.title, 19);
         label.setPadding(dp(4), dp(12), dp(4), dp(5));
         card.addView(label);
-        card.setBackgroundColor(Color.WHITE);
+        card.setBackgroundColor(SURFACE);
         card.setOnClickListener(v -> play(video));
         card.setFocusable(true);
         card.setOnFocusChangeListener((v, focused) -> {
             v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start();
-            v.setBackgroundColor(focused ? Color.rgb(255, 226, 166) : Color.WHITE);
+            v.setBackgroundColor(focused ? Color.rgb(92, 61, 10) : SURFACE);
         });
         LinearLayout.LayoutParams params = wide();
         params.setMargins(0, 0, 0, dp(16));
@@ -200,7 +259,7 @@ public final class MainActivity extends Activity {
         LinearLayout content = page();
         content.addView(header("Rodičovská správa", "Hotovo", v -> showProfilePicker()));
         content.addView(title("Přidat povolené video", 25));
-        content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.DKGRAY));
+        content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.LTGRAY));
         content.addView(space(12));
         Button search = button("🔎  Vyhledat video přímo na YouTube", Color.rgb(230, 33, 23));
         search.setOnClickListener(v -> askSearchText());
@@ -439,7 +498,7 @@ public final class MainActivity extends Activity {
         for (VideoStore.Video video : videos) {
             LinearLayout row = new LinearLayout(this);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            TextView label = text(video.title, 16, NAVY);
+            TextView label = text(video.title, 16, Color.WHITE);
             Button remove = button("Odebrat", Color.rgb(180, 48, 48));
             remove.setOnClickListener(v -> { store.removeVideo(profile, video.id); showParentArea(); });
             row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1));
@@ -449,7 +508,7 @@ public final class MainActivity extends Activity {
         for (VideoStore.Channel channel : store.channels(profile)) {
             LinearLayout row = new LinearLayout(this);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            TextView label = text("Kanál: " + channel.title, 16, NAVY);
+            TextView label = text("Kanál: " + channel.title, 16, Color.WHITE);
             Button remove = button("Odebrat", Color.rgb(180, 48, 48));
             remove.setOnClickListener(v -> { store.removeChannel(profile, channel.id); showParentArea(); });
             row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1));
@@ -530,11 +589,11 @@ public final class MainActivity extends Activity {
         else super.onBackPressed();
     }
 
-    private LinearLayout page() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setPadding(dp(20), dp(24), dp(20), dp(28)); v.setBackgroundColor(CREAM); return v; }
+    private LinearLayout page() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setPadding(dp(20), dp(24), dp(20), dp(28)); v.setBackgroundColor(DARK); return v; }
     private ScrollView scroll(View view) { ScrollView s = new ScrollView(this); s.setFillViewport(true); s.addView(view); return s; }
     private void render(View view) { root.removeAllViews(); root.addView(view, new FrameLayout.LayoutParams(-1, -1)); }
     private View header(String label, String action, View.OnClickListener listener) { LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); TextView name = title(label, 21); Button b = button(action, NAVY); b.setOnClickListener(listener); row.addView(name, new LinearLayout.LayoutParams(0, dp(64), 1)); row.addView(b, new LinearLayout.LayoutParams(dp(105), dp(48))); return row; }
-    private TextView title(String value, int size) { TextView t = text(value, size, NAVY); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t; }
+    private TextView title(String value, int size) { TextView t = text(value, size, Color.WHITE); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t; }
     private TextView text(String value, int size, int color) { TextView t = new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color); t.setPadding(0, dp(5), 0, dp(5)); return t; }
     private Button button(String value, int color) { Button b = new Button(this); b.setText(value); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setAllCaps(false); b.setFocusable(true); b.setBackgroundResource(cz.petr.bezpecnevideo.R.drawable.tv_button); b.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f).setDuration(100).start()); return b; }
     private EditText input(String hint) { EditText e = new EditText(this); e.setHint(hint); e.setTextSize(17); e.setSingleLine(true); e.setPadding(dp(12), dp(10), dp(12), dp(10)); return e; }

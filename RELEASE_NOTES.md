@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.5 – televizní označení výsledku
+# Bezpečné video 0.1.6 – tmavá galerie videí
 
-Aktualizace přidává výběr výsledků navržený přímo pro dálkový ovladač Google TV.
+Aktualizace mění dětskou obrazovku na tmavou televizní galerii konkrétních videí.
 
 ## Funkce
 
@@ -22,10 +22,14 @@ Aktualizace přidává výběr výsledků navržený přímo pro dálkový ovlad
 - výrazný žlutý rámeček kolem výsledku vybraného šipkami,
 - označení videa nebo kanálu tlačítkem OK,
 - přímé předání výběru z YouTube stránky do rodičovské správy.
+- načtení náhledů nejnovějších videí ze všech povolených kanálů,
+- přímý výběr konkrétního videa po otevření profilu dítěte,
+- tmavý vzhled dětské i rodičovské části,
+- oranžové zvýraznění položky vybrané dálkovým ovladačem.
 
 ## Instalace
 
-V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.5.apk` ručně.
+V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.6.apk` ručně.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
