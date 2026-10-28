@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.18 – český CrunchLabs
+# Bezpečné video 0.1.19 – titulky ve výchozím stavu vypnuté
 
-Aktualizace řadí vícejazyčná videa CrunchLabs mezi český obsah a nastavuje přehrávači češtinu.
+Aktualizace vypíná automatické zobrazování titulků a zachovává české rozhraní přehrávače.
 
 ## Funkce
 
@@ -67,10 +67,13 @@ Aktualizace řadí vícejazyčná videa CrunchLabs mezi český obsah a nastavuj
 - přehrávač používá české rozhraní,
 - jako preferovaný jazyk titulků je nastavena čeština,
 - český dabing se použije podle jazykových preferencí přihlášeného YouTube účtu.
+- odstraněná preference českých titulků,
+- titulky se při spuštění videa standardně nezapínají,
+- české rozhraní a preference dabingu účtu zůstávají zachované.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.18.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.19.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

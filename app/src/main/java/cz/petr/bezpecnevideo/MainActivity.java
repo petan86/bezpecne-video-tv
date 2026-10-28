@@ -340,7 +340,7 @@ public final class MainActivity extends Activity {
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
                 "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
                 "<body><iframe " +
-                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0&hl=cs&cc_lang_pref=cs' " +
+                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0&hl=cs&cc_load_policy=0' " +
                 "title='" + channelTitle.replace("'", "") + "' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
@@ -390,7 +390,7 @@ public final class MainActivity extends Activity {
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
                 "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
                 "<body><iframe " +
-                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0&hl=cs&cc_lang_pref=cs' " +
+                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0&hl=cs&cc_load_policy=0' " +
                 "title='YouTube video player' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
