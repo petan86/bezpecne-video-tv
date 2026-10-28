@@ -147,7 +147,7 @@ public final class MainActivity extends Activity {
         }
         if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(CRUNCHLABS_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs", 1, content, grid, loading, displayed);
+            loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs – český dabing", 0, content, grid, loading, displayed);
         }
         if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(EVERY_BRICK_CHANNEL)) {
             channelCount++;
@@ -340,7 +340,7 @@ public final class MainActivity extends Activity {
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
                 "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
                 "<body><iframe " +
-                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0' " +
+                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0&hl=cs&cc_lang_pref=cs' " +
                 "title='" + channelTitle.replace("'", "") + "' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);
@@ -390,7 +390,7 @@ public final class MainActivity extends Activity {
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
                 "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
                 "<body><iframe " +
-                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0' " +
+                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0&hl=cs&cc_lang_pref=cs' " +
                 "title='YouTube video player' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
         webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         LinearLayout shell = new LinearLayout(this);

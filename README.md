@@ -22,6 +22,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - přednastavený kanál Kidibli pro Filípka,
 - česká a rodičem ručně povolená videa se v kategorii Vše zobrazují před anglickými,
 - zahřátí YouTube přehrávače, hardwarová akcelerace, webová cache a paralelní načítání náhledů,
+- CrunchLabs je řazený jako český obsah a přehrávač preferuje české rozhraní a jazyk,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.

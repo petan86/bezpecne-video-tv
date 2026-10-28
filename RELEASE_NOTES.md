@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.17 – rychlejší načítání a přehrávání
+# Bezpečné video 0.1.18 – český CrunchLabs
 
-Aktualizace zkracuje čekání před spuštěním videa a zrychluje načítání galerie.
+Aktualizace řadí vícejazyčná videa CrunchLabs mezi český obsah a nastavuje přehrávači češtinu.
 
 ## Funkce
 
@@ -63,10 +63,14 @@ Aktualizace zkracuje čekání před spuštěním videa a zrychluje načítání
 - standardní webová cache a DOM úložiště,
 - paralelní načítání obrázkových náhledů,
 - původní optimalizovaný identifikátor Android WebView bez vlastní přípony.
+- CrunchLabs se zobrazuje mezi českými kanály před anglickým obsahem,
+- přehrávač používá české rozhraní,
+- jako preferovaný jazyk titulků je nastavena čeština,
+- český dabing se použije podle jazykových preferencí přihlášeného YouTube účtu.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.17.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.18.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
