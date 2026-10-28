@@ -126,28 +126,28 @@ public final class MainActivity extends Activity {
         int channelCount = 0;
         if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(SLIVKI_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, grid, loading, displayed);
+            loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", 0, content, grid, loading, displayed);
         }
         if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(CRUNCHLABS_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs", content, grid, loading, displayed);
+            loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs", 1, content, grid, loading, displayed);
         }
         if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(EVERY_BRICK_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(EVERY_BRICK_CHANNEL, "Every Brick", content, grid, loading, displayed);
+            loadChannelFeed(EVERY_BRICK_CHANNEL, "Every Brick", 1, content, grid, loading, displayed);
         }
         if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(PAW_PATROL_CZECH_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky", content, grid, loading, displayed);
+            loadChannelFeed(PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky", 0, content, grid, loading, displayed);
         }
         if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(KIDIBLI_CHANNEL)) {
             channelCount++;
-            loadChannelFeed(KIDIBLI_CHANNEL, "Kidibli", content, grid, loading, displayed);
+            loadChannelFeed(KIDIBLI_CHANNEL, "Kidibli", 0, content, grid, loading, displayed);
         }
         for (VideoStore.Channel channel : store.channels(activeProfile)) {
             if (isChannelVisible(channel.id)) {
                 channelCount++;
-                loadChannelFeed(channel.id, channel.title, content, grid, loading, displayed);
+                loadChannelFeed(channel.id, channel.title, 0, content, grid, loading, displayed);
             }
         }
         if (channelCount == 0) {
@@ -228,7 +228,7 @@ public final class MainActivity extends Activity {
         return chip;
     }
 
-    private void loadChannelFeed(String channelId, String channelTitle, LinearLayout content,
+    private void loadChannelFeed(String channelId, String channelTitle, int languagePriority, LinearLayout content,
                                  GridLayout grid, TextView loading, Set<String> displayed) {
         Executors.newSingleThreadExecutor().execute(() -> {
             List<VideoStore.Video> found = new ArrayList<>();
@@ -259,7 +259,7 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (content.getParent() == null) return;
                 for (VideoStore.Video video : found) {
-                    if (displayed.add(video.id)) addVideoToGrid(grid, video);
+                    if (displayed.add(video.id)) addVideoToGrid(grid, video, languagePriority);
                 }
                 if (loading.getParent() == content) content.removeView(loading);
                 if (found.isEmpty() && content.getChildCount() <= 3)
@@ -269,7 +269,12 @@ public final class MainActivity extends Activity {
     }
 
     private void addVideoToGrid(GridLayout grid, VideoStore.Video video) {
+        addVideoToGrid(grid, video, 0);
+    }
+
+    private void addVideoToGrid(GridLayout grid, VideoStore.Video video, int languagePriority) {
         View card = videoCard(video);
+        card.setTag(languagePriority);
         int available = getResources().getDisplayMetrics().widthPixels - dp(72);
         int width = Math.max(dp(220), available / 4);
         GridLayout.LayoutParams params = new GridLayout.LayoutParams();
@@ -277,7 +282,15 @@ public final class MainActivity extends Activity {
         params.height = GridLayout.LayoutParams.WRAP_CONTENT;
         params.setMargins(dp(7), dp(7), dp(7), dp(16));
         card.setLayoutParams(params);
-        grid.addView(card);
+        int insertAt = grid.getChildCount();
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            Object tag = grid.getChildAt(i).getTag();
+            if (tag instanceof Integer && (Integer) tag > languagePriority) {
+                insertAt = i;
+                break;
+            }
+        }
+        grid.addView(card, insertAt);
     }
 
     private View channelCard(String channelTitle, String uploadsPlaylist) {

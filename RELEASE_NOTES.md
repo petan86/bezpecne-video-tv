@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.15 – odebrání Beast Builders Česky
+# Bezpečné video 0.1.16 – česká videa jako první
 
-Aktualizace odstraňuje kanál Beast Builders Česky z dětských profilů.
+Aktualizace upřednostňuje česká videa v dětské galerii.
 
 ## Funkce
 
@@ -55,10 +55,13 @@ Aktualizace odstraňuje kanál Beast Builders Česky z dětských profilů.
 - zvolený filtr zůstane zachovaný po návratu z přehrávače.
 - automatické odebrání kanálu Beast Builders Česky z Matýska i Filípka,
 - zablokování jeho opětovného přidání přes rodičovské vyhledávání.
+- české kanály se v kategorii Vše zobrazují před anglickými,
+- ručně povolená videa zůstávají nahoře,
+- pořadí se nemění podle rychlosti načtení jednotlivých kanálů.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.15.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.16.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
