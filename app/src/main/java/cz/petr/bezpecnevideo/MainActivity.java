@@ -1,0 +1,285 @@
+package cz.petr.bezpecnevideo;
+
+import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.app.Activity;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.CookieManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.List;
+
+public final class MainActivity extends Activity {
+    private static final int NAVY = Color.rgb(20, 33, 61);
+    private static final int ORANGE = Color.rgb(252, 163, 17);
+    private static final int CREAM = Color.rgb(255, 248, 236);
+    private VideoStore store;
+    private String activeProfile;
+    private WebView webView;
+    private FrameLayout root;
+    private View customView;
+    private WebChromeClient.CustomViewCallback customViewCallback;
+
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        store = new VideoStore(this);
+        root = new FrameLayout(this);
+        setContentView(root);
+        showProfilePicker();
+    }
+
+    private void showProfilePicker() {
+        activeProfile = null;
+        LinearLayout page = page();
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.addView(title("Kdo se bude dívat?", 30));
+        page.addView(space(28));
+        page.addView(profileButton("🦊", "Matýsek", Color.rgb(54, 123, 245), VideoStore.MATYSEK));
+        page.addView(space(18));
+        page.addView(profileButton("🐸", "Filípek", Color.rgb(34, 160, 107), VideoStore.FILIPEK));
+        page.addView(space(40));
+        Button parent = button("⚙  Rodičovská správa", NAVY);
+        parent.setOnClickListener(v -> requestPin(this::showParentArea));
+        page.addView(parent, wide());
+        render(page);
+    }
+
+    private Button profileButton(String emoji, String name, int color, String profile) {
+        Button button = button(emoji + "   " + name, color);
+        button.setTextSize(23);
+        button.setMinHeight(dp(84));
+        button.setOnClickListener(v -> { activeProfile = profile; showLibrary(); });
+        button.setContentDescription("Otevřít profil " + name);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setPadding(dp(20), dp(12), dp(20), dp(12));
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
+        button.setFocusable(true);
+        button.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.06f : 1f).scaleY(focused ? 1.06f : 1f).setDuration(120).start());
+        return button;
+    }
+
+    private void showLibrary() {
+        List<VideoStore.Video> videos = store.videos(activeProfile);
+        LinearLayout content = page();
+        content.addView(header(profileName(), "Přepnout", v -> showProfilePicker()));
+        content.addView(title("Moje povolená videa", 25));
+        content.addView(space(12));
+        if (videos.isEmpty()) {
+            TextView empty = text("Rodič zatím nepřidal žádné video.", 18, Color.DKGRAY);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, dp(70), 0, dp(70));
+            content.addView(empty, wide());
+        }
+        for (VideoStore.Video video : videos) content.addView(videoCard(video));
+        render(scroll(content));
+    }
+
+    private View videoCard(VideoStore.Video video) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(12), dp(12), dp(14));
+        ImageView thumbnail = new ImageView(this);
+        thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        thumbnail.setBackgroundColor(Color.LTGRAY);
+        thumbnail.setContentDescription("Náhled videa " + video.title);
+        new ThumbnailLoader(thumbnail).execute("https://i.ytimg.com/vi/" + video.id + "/hqdefault.jpg");
+        card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(190)));
+        TextView label = title("▶  " + video.title, 19);
+        label.setPadding(dp(4), dp(12), dp(4), dp(5));
+        card.addView(label);
+        card.setBackgroundColor(Color.WHITE);
+        card.setOnClickListener(v -> play(video));
+        card.setFocusable(true);
+        card.setOnFocusChangeListener((v, focused) -> {
+            v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start();
+            v.setBackgroundColor(focused ? Color.rgb(255, 226, 166) : Color.WHITE);
+        });
+        LinearLayout.LayoutParams params = wide();
+        params.setMargins(0, 0, 0, dp(16));
+        card.setElevation(dp(3));
+        card.setLayoutParams(params);
+        return card;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void play(VideoStore.Video video) {
+        webView = configuredWebView();
+        String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
+                "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
+                "<body style='margin:0;background:#000'><iframe width='100%' height='100%' " +
+                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0' " +
+                "title='YouTube video player' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
+        webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.BLACK);
+        shell.addView(header("←  " + video.title, "Zavřít", v -> closePlayer()), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        render(shell);
+    }
+
+    private void closePlayer() {
+        if (webView != null) { webView.stopLoading(); webView.destroy(); webView = null; }
+        showLibrary();
+    }
+
+    private void showParentArea() {
+        LinearLayout content = page();
+        content.addView(header("Rodičovská správa", "Hotovo", v -> showProfilePicker()));
+        content.addView(title("Přidat povolené video", 25));
+        content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.DKGRAY));
+        content.addView(space(12));
+        EditText url = input("Odkaz na YouTube video");
+        EditText videoTitle = input("Název pro dítě");
+        content.addView(url, wide());
+        content.addView(videoTitle, wide());
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        Button addMatysek = button("Přidat Matýskovi", Color.rgb(54, 123, 245));
+        Button addFilipek = button("Přidat Filípkovi", Color.rgb(34, 160, 107));
+        View.OnClickListener add = v -> {
+            String profile = v == addMatysek ? VideoStore.MATYSEK : VideoStore.FILIPEK;
+            if (store.addVideo(profile, url.getText().toString(), videoTitle.getText().toString())) {
+                Toast.makeText(this, "Video bylo povoleno", Toast.LENGTH_SHORT).show();
+                showParentArea();
+            } else Toast.makeText(this, "Tento YouTube odkaz není platný", Toast.LENGTH_LONG).show();
+        };
+        addMatysek.setOnClickListener(add); addFilipek.setOnClickListener(add);
+        actions.addView(addMatysek, new LinearLayout.LayoutParams(0, dp(58), 1));
+        actions.addView(addFilipek, new LinearLayout.LayoutParams(0, dp(58), 1));
+        content.addView(actions, wide());
+        content.addView(space(28));
+        Button premium = button("YouTube Premium – přihlášení a kontrola", Color.rgb(190, 30, 45));
+        premium.setOnClickListener(v -> showPremiumLogin());
+        content.addView(premium, wide());
+        content.addView(text("Přihlášení probíhá přímo na stránce YouTube. Aplikace heslo neukládá.", 13, Color.GRAY));
+        content.addView(space(26));
+        content.addView(title("Povolený obsah", 24));
+        addManagementList(content, VideoStore.MATYSEK, "Matýsek");
+        addManagementList(content, VideoStore.FILIPEK, "Filípek");
+        content.addView(space(18));
+        Button pin = button("Změnit rodičovský PIN", NAVY);
+        pin.setOnClickListener(v -> changePin());
+        content.addView(pin, wide());
+        render(scroll(content));
+    }
+
+    private void addManagementList(LinearLayout content, String profile, String name) {
+        content.addView(title(name, 20));
+        List<VideoStore.Video> videos = store.videos(profile);
+        if (videos.isEmpty()) content.addView(text("Zatím bez videí", 15, Color.GRAY));
+        for (VideoStore.Video video : videos) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label = text(video.title, 16, NAVY);
+            Button remove = button("Odebrat", Color.rgb(180, 48, 48));
+            remove.setOnClickListener(v -> { store.removeVideo(profile, video.id); showParentArea(); });
+            row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1));
+            row.addView(remove, new LinearLayout.LayoutParams(dp(110), dp(48)));
+            content.addView(row, wide());
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void showPremiumLogin() {
+        webView = configuredWebView();
+        webView.loadUrl("https://m.youtube.com/paid_memberships");
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.addView(header("YouTube Premium", "Zpět", v -> { webView.stopLoading(); webView.destroy(); webView = null; showParentArea(); }), new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        render(shell);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private WebView configuredWebView() {
+        CookieManager.getInstance().setAcceptCookie(true);
+        WebView view = new WebView(this);
+        view.getSettings().setJavaScriptEnabled(true);
+        view.getSettings().setDomStorageEnabled(true);
+        view.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        view.getSettings().setUserAgentString(view.getSettings().getUserAgentString() + " BezpecneVideo/0.1");
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+        view.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) { return false; }
+        });
+        view.setWebChromeClient(new WebChromeClient() {
+            @Override public void onShowCustomView(View view, CustomViewCallback callback) {
+                customView = view; customViewCallback = callback;
+                root.removeAllViews(); root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+            }
+            @Override public void onHideCustomView() {
+                if (customView == null) return;
+                customViewCallback.onCustomViewHidden(); customView = null; customViewCallback = null;
+                if (webView != null) playRestore();
+            }
+        });
+        return view;
+    }
+
+    private void playRestore() {
+        View shell = (View) webView.getParent();
+        root.removeAllViews();
+        if (shell.getParent() instanceof ViewGroup) ((ViewGroup) shell.getParent()).removeView(shell);
+        root.addView(shell);
+    }
+
+    private void requestPin(Runnable success) {
+        EditText pin = input("PIN");
+        pin.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        new AlertDialog.Builder(this).setTitle("Rodičovský PIN").setView(pin)
+                .setPositiveButton("Odemknout", (dialog, which) -> {
+                    if (store.checkPin(pin.getText().toString())) success.run();
+                    else Toast.makeText(this, "Nesprávný PIN", Toast.LENGTH_LONG).show();
+                }).setNegativeButton("Zrušit", null).show();
+    }
+
+    private void changePin() {
+        EditText pin = input("Nový PIN (4–8 číslic)");
+        pin.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        new AlertDialog.Builder(this).setTitle("Změnit PIN").setView(pin)
+                .setPositiveButton("Uložit", (dialog, which) -> {
+                    String value = pin.getText().toString();
+                    if (value.matches("[0-9]{4,8}")) { store.setPin(value); Toast.makeText(this, "PIN změněn", Toast.LENGTH_SHORT).show(); }
+                    else Toast.makeText(this, "PIN musí mít 4 až 8 číslic", Toast.LENGTH_LONG).show();
+                }).setNegativeButton("Zrušit", null).show();
+    }
+
+    @Override public void onBackPressed() {
+        if (customView != null) { webView.getWebChromeClient(); customViewCallback.onCustomViewHidden(); customView = null; showLibrary(); }
+        else if (webView != null) closePlayer();
+        else if (activeProfile != null) showProfilePicker();
+        else super.onBackPressed();
+    }
+
+    private LinearLayout page() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setPadding(dp(20), dp(24), dp(20), dp(28)); v.setBackgroundColor(CREAM); return v; }
+    private ScrollView scroll(View view) { ScrollView s = new ScrollView(this); s.setFillViewport(true); s.addView(view); return s; }
+    private void render(View view) { root.removeAllViews(); root.addView(view, new FrameLayout.LayoutParams(-1, -1)); }
+    private View header(String label, String action, View.OnClickListener listener) { LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); TextView name = title(label, 21); Button b = button(action, NAVY); b.setOnClickListener(listener); row.addView(name, new LinearLayout.LayoutParams(0, dp(64), 1)); row.addView(b, new LinearLayout.LayoutParams(dp(105), dp(48))); return row; }
+    private TextView title(String value, int size) { TextView t = text(value, size, NAVY); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t; }
+    private TextView text(String value, int size, int color) { TextView t = new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color); t.setPadding(0, dp(5), 0, dp(5)); return t; }
+    private Button button(String value, int color) { Button b = new Button(this); b.setText(value); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setAllCaps(false); b.setFocusable(true); b.setBackgroundResource(cz.petr.bezpecnevideo.R.drawable.tv_button); b.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f).setDuration(100).start()); return b; }
+    private EditText input(String hint) { EditText e = new EditText(this); e.setHint(hint); e.setTextSize(17); e.setSingleLine(true); e.setPadding(dp(12), dp(10), dp(12), dp(10)); return e; }
+    private View space(int height) { View v = new View(this); v.setLayoutParams(new LinearLayout.LayoutParams(1, dp(height))); return v; }
+    private LinearLayout.LayoutParams wide() { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, dp(5), 0, dp(5)); return p; }
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private String profileName() { return VideoStore.MATYSEK.equals(activeProfile) ? "Matýsek" : "Filípek"; }
+}

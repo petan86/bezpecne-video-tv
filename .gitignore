@@ -1,0 +1,16 @@
+# Android / Gradle
+.gradle/
+.gradle-local/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+
+# Stažené a lokální sestavovací soubory
+gradle-*-bin.zip
+*.apk
+
+# Systémové soubory
+.DS_Store
+Thumbs.db
