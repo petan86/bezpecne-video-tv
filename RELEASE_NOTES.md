@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.13 – Kidibli pro Filípka
+# Bezpečné video 0.1.14 – funkční filtrování kategorií
 
-Aktualizace přidává Filípkovi celý kanál Kidibli.
+Aktualizace mění horní kategorie kanálů na skutečné ovládací prvky.
 
 ## Funkce
 
@@ -49,10 +49,14 @@ Aktualizace přidává Filípkovi celý kanál Kidibli.
 - automatické načítání nejnovějších videí z kanálu Kidibli,
 - samostatná kategorie Kidibli ve Filípkově profilu,
 - budoucí videa Kidibli se zobrazí automaticky.
+- kategorie lze vybrat šipkami a tlačítkem OK,
+- Vše zobrazí videa ze všech povolených zdrojů,
+- výběr kanálu zobrazí pouze jeho videa,
+- zvolený filtr zůstane zachovaný po návratu z přehrávače.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.13.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.14.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

@@ -56,6 +56,7 @@ public final class MainActivity extends Activity {
     private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
     private String activeProfile;
+    private String activeChannelFilter;
     private WebView webView;
     private FrameLayout root;
     private View customView;
@@ -90,7 +91,7 @@ public final class MainActivity extends Activity {
         Button button = button(emoji + "   " + name, color);
         button.setTextSize(23);
         button.setMinHeight(dp(84));
-        button.setOnClickListener(v -> { activeProfile = profile; showLibrary(); });
+        button.setOnClickListener(v -> { activeProfile = profile; activeChannelFilter = null; showLibrary(); });
         button.setContentDescription("Otevřít profil " + name);
         button.setAllCaps(false);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -102,7 +103,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showLibrary() {
-        List<VideoStore.Video> videos = store.videos(activeProfile);
+        List<VideoStore.Video> videos = activeChannelFilter == null ? store.videos(activeProfile) : new ArrayList<>();
         LinearLayout content = page();
         content.addView(tvHomeHeader());
         content.addView(space(12));
@@ -122,20 +123,33 @@ public final class MainActivity extends Activity {
         render(scroll(content));
         Set<String> displayed = new HashSet<>();
         for (VideoStore.Video video : videos) displayed.add(video.id);
-        int channelCount = store.channels(activeProfile).size();
-        if (VideoStore.MATYSEK.equals(activeProfile)) {
-            channelCount += 3;
+        int channelCount = 0;
+        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(SLIVKI_CHANNEL)) {
+            channelCount++;
             loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, grid, loading, displayed);
+        }
+        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(CRUNCHLABS_CHANNEL)) {
+            channelCount++;
             loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs", content, grid, loading, displayed);
+        }
+        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(EVERY_BRICK_CHANNEL)) {
+            channelCount++;
             loadChannelFeed(EVERY_BRICK_CHANNEL, "Every Brick", content, grid, loading, displayed);
         }
-        if (VideoStore.FILIPEK.equals(activeProfile)) {
-            channelCount += 2;
+        if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(PAW_PATROL_CZECH_CHANNEL)) {
+            channelCount++;
             loadChannelFeed(PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky", content, grid, loading, displayed);
+        }
+        if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(KIDIBLI_CHANNEL)) {
+            channelCount++;
             loadChannelFeed(KIDIBLI_CHANNEL, "Kidibli", content, grid, loading, displayed);
         }
-        for (VideoStore.Channel channel : store.channels(activeProfile))
-            loadChannelFeed(channel.id, channel.title, content, grid, loading, displayed);
+        for (VideoStore.Channel channel : store.channels(activeProfile)) {
+            if (isChannelVisible(channel.id)) {
+                channelCount++;
+                loadChannelFeed(channel.id, channel.title, content, grid, loading, displayed);
+            }
+        }
         if (channelCount == 0) {
             content.removeView(loading);
             if (videos.isEmpty()) {
@@ -145,6 +159,10 @@ public final class MainActivity extends Activity {
                 content.addView(empty, wide());
             }
         }
+    }
+
+    private boolean isChannelVisible(String channelId) {
+        return activeChannelFilter == null || activeChannelFilter.equals(channelId);
     }
 
     private View tvHomeHeader() {
@@ -172,24 +190,33 @@ public final class MainActivity extends Activity {
     private View categoryRow() {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        TextView all = categoryChip("Vše", true);
+        TextView all = categoryChip("Vše", activeChannelFilter == null, null);
         row.addView(all);
         if (VideoStore.MATYSEK.equals(activeProfile)) {
-            row.addView(categoryChip("Toto je Slivki", false));
-            row.addView(categoryChip("CrunchLabs", false));
-            row.addView(categoryChip("Every Brick", false));
+            row.addView(categoryChip("Toto je Slivki", SLIVKI_CHANNEL.equals(activeChannelFilter), SLIVKI_CHANNEL));
+            row.addView(categoryChip("CrunchLabs", CRUNCHLABS_CHANNEL.equals(activeChannelFilter), CRUNCHLABS_CHANNEL));
+            row.addView(categoryChip("Every Brick", EVERY_BRICK_CHANNEL.equals(activeChannelFilter), EVERY_BRICK_CHANNEL));
         }
         if (VideoStore.FILIPEK.equals(activeProfile)) {
-            row.addView(categoryChip("Tlapková patrola", false));
-            row.addView(categoryChip("Kidibli", false));
+            row.addView(categoryChip("Tlapková patrola", PAW_PATROL_CZECH_CHANNEL.equals(activeChannelFilter), PAW_PATROL_CZECH_CHANNEL));
+            row.addView(categoryChip("Kidibli", KIDIBLI_CHANNEL.equals(activeChannelFilter), KIDIBLI_CHANNEL));
         }
-        for (VideoStore.Channel channel : store.channels(activeProfile)) row.addView(categoryChip(channel.title, false));
+        for (VideoStore.Channel channel : store.channels(activeProfile))
+            row.addView(categoryChip(channel.title, channel.id.equals(activeChannelFilter), channel.id));
         return row;
     }
 
-    private TextView categoryChip(String label, boolean selected) {
+    private TextView categoryChip(String label, boolean selected, String channelId) {
         TextView chip = text(label, 16, selected ? Color.BLACK : Color.WHITE);
         chip.setGravity(Gravity.CENTER);
+        chip.setFocusable(true);
+        chip.setClickable(true);
+        chip.setOnClickListener(v -> {
+            activeChannelFilter = channelId;
+            showLibrary();
+        });
+        chip.setOnFocusChangeListener((v, focused) -> v.animate()
+                .scaleX(focused ? 1.08f : 1f).scaleY(focused ? 1.08f : 1f).setDuration(100).start());
         GradientDrawable background = new GradientDrawable();
         background.setColor(selected ? Color.WHITE : Color.rgb(48, 50, 57));
         background.setCornerRadius(dp(10));
