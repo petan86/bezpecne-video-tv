@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.10 – Tlapková patrola pro Filípka
+# Bezpečné video 0.1.11 – CrunchLabs pro Matýska
 
-Aktualizace přidává Filípkovi český kanál Tlapková patrola.
+Aktualizace přidává Matýskovi celý kanál CrunchLabs.
 
 ## Funkce
 
@@ -40,10 +40,13 @@ Aktualizace přidává Filípkovi český kanál Tlapková patrola.
 - automatické načítání nejnovějších videí z kanálu PAW Patrol Czech,
 - samostatná kategorie Tlapková patrola ve Filípkově profilu,
 - nová videa kanálu se zobrazí bez další aktualizace aplikace.
+- automatické načítání nejnovějších videí z kanálu CrunchLabs,
+- samostatná kategorie CrunchLabs v Matýskově profilu,
+- budoucí videa CrunchLabs se zobrazí automaticky.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.10.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.11.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 

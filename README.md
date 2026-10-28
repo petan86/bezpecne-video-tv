@@ -17,6 +17,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - tmavé televizní prostředí a galerie náhledů konkrétních videí z povolených kanálů,
 - domovská obrazovka inspirovaná ovládáním YouTube pro TV se čtyřmi náhledy v řadě,
 - přednastavený český kanál Tlapková patrola pro Filípka,
+- přednastavený kanál CrunchLabs pro Matýska,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.
