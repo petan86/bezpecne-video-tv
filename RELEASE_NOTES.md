@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.12 – Every Brick pro Matýska
+# Bezpečné video 0.1.13 – Kidibli pro Filípka
 
-Aktualizace přidává Matýskovi celý kanál Every Brick.
+Aktualizace přidává Filípkovi celý kanál Kidibli.
 
 ## Funkce
 
@@ -46,10 +46,13 @@ Aktualizace přidává Matýskovi celý kanál Every Brick.
 - automatické načítání nejnovějších videí z kanálu Every Brick,
 - samostatná kategorie Every Brick v Matýskově profilu,
 - budoucí videa kanálu se zobrazí automaticky.
+- automatické načítání nejnovějších videí z kanálu Kidibli,
+- samostatná kategorie Kidibli ve Filípkově profilu,
+- budoucí videa Kidibli se zobrazí automaticky.
 
 ## Instalace
 
-Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.12.apk`.
+Verzi nainstalujte aktualizačním tlačítkem v rodičovské správě nebo ručně jako `BezpecneVideo-TV-0.1.13.apk`.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
