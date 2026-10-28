@@ -15,6 +15,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - povolení jednotlivého videa nebo celého kanálu přímo z výsledků vyhledávání,
 - kontrola, stažení a spuštění aktualizace přímo z rodičovské správy,
 - tmavé televizní prostředí a galerie náhledů konkrétních videí z povolených kanálů,
+- domovská obrazovka inspirovaná ovládáním YouTube pro TV se čtyřmi náhledy v řadě,
 - webová obrazovka pro přihlášení a ověření YouTube Premium.
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.

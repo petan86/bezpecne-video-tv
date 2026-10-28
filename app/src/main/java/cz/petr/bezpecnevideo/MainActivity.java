@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.net.Uri;
 import android.text.InputType;
@@ -20,6 +21,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -98,10 +100,18 @@ public final class MainActivity extends Activity {
     private void showLibrary() {
         List<VideoStore.Video> videos = store.videos(activeProfile);
         LinearLayout content = page();
-        content.addView(header(profileName(), "Přepnout", v -> showProfilePicker()));
-        content.addView(title("Vyber si video", 27));
+        content.addView(tvHomeHeader());
         content.addView(space(12));
-        for (VideoStore.Video video : videos) content.addView(videoCard(video));
+        content.addView(categoryRow());
+        content.addView(space(18));
+        content.addView(title("Doporučeno pro tebe", 27));
+        content.addView(space(12));
+        GridLayout grid = new GridLayout(this);
+        grid.setColumnCount(4);
+        grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        grid.setUseDefaultMargins(false);
+        content.addView(grid, wide());
+        for (VideoStore.Video video : videos) addVideoToGrid(grid, video);
         TextView loading = text("Načítám náhledy z povolených kanálů…", 17, Color.LTGRAY);
         loading.setPadding(0, dp(24), 0, dp(24));
         content.addView(loading, wide());
@@ -111,10 +121,10 @@ public final class MainActivity extends Activity {
         int channelCount = store.channels(activeProfile).size();
         if (VideoStore.MATYSEK.equals(activeProfile)) {
             channelCount++;
-            loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, loading, displayed);
+            loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", content, grid, loading, displayed);
         }
         for (VideoStore.Channel channel : store.channels(activeProfile))
-            loadChannelFeed(channel.id, channel.title, content, loading, displayed);
+            loadChannelFeed(channel.id, channel.title, content, grid, loading, displayed);
         if (channelCount == 0) {
             content.removeView(loading);
             if (videos.isEmpty()) {
@@ -126,8 +136,54 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private View tvHomeHeader() {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView playLogo = text("▶", 27, Color.WHITE);
+        playLogo.setGravity(Gravity.CENTER);
+        GradientDrawable red = new GradientDrawable();
+        red.setColor(Color.rgb(230, 33, 23));
+        red.setCornerRadius(dp(10));
+        playLogo.setBackground(red);
+        TextView appName = title("  Bezpečné video", 24);
+        TextView profile = text(profileName(), 18, Color.WHITE);
+        profile.setGravity(Gravity.CENTER);
+        profile.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        profile.setBackgroundResource(R.drawable.tv_button);
+        profile.setFocusable(true);
+        profile.setOnClickListener(v -> showProfilePicker());
+        row.addView(playLogo, new LinearLayout.LayoutParams(dp(62), dp(42)));
+        row.addView(appName, new LinearLayout.LayoutParams(0, dp(58), 1));
+        row.addView(profile, new LinearLayout.LayoutParams(dp(150), dp(48)));
+        return row;
+    }
+
+    private View categoryRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView all = categoryChip("Vše", true);
+        row.addView(all);
+        if (VideoStore.MATYSEK.equals(activeProfile)) row.addView(categoryChip("Toto je Slivki", false));
+        for (VideoStore.Channel channel : store.channels(activeProfile)) row.addView(categoryChip(channel.title, false));
+        return row;
+    }
+
+    private TextView categoryChip(String label, boolean selected) {
+        TextView chip = text(label, 16, selected ? Color.BLACK : Color.WHITE);
+        chip.setGravity(Gravity.CENTER);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(selected ? Color.WHITE : Color.rgb(48, 50, 57));
+        background.setCornerRadius(dp(10));
+        chip.setBackground(background);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(42));
+        params.setMargins(0, 0, dp(12), 0);
+        chip.setPadding(dp(22), 0, dp(22), 0);
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
     private void loadChannelFeed(String channelId, String channelTitle, LinearLayout content,
-                                 TextView loading, Set<String> displayed) {
+                                 GridLayout grid, TextView loading, Set<String> displayed) {
         Executors.newSingleThreadExecutor().execute(() -> {
             List<VideoStore.Video> found = new ArrayList<>();
             try {
@@ -157,13 +213,25 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (content.getParent() == null) return;
                 for (VideoStore.Video video : found) {
-                    if (displayed.add(video.id)) content.addView(videoCard(video), content.indexOfChild(loading));
+                    if (displayed.add(video.id)) addVideoToGrid(grid, video);
                 }
                 if (loading.getParent() == content) content.removeView(loading);
                 if (found.isEmpty() && content.getChildCount() <= 3)
                     content.addView(text("Náhledy kanálu se nepodařilo načíst. Zkontrolujte internet.", 16, Color.LTGRAY), wide());
             });
         });
+    }
+
+    private void addVideoToGrid(GridLayout grid, VideoStore.Video video) {
+        View card = videoCard(video);
+        int available = getResources().getDisplayMetrics().widthPixels - dp(72);
+        int width = Math.max(dp(220), available / 4);
+        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+        params.width = width - dp(14);
+        params.height = GridLayout.LayoutParams.WRAP_CONTENT;
+        params.setMargins(dp(7), dp(7), dp(7), dp(16));
+        card.setLayoutParams(params);
+        grid.addView(card);
     }
 
     private View channelCard(String channelTitle, String uploadsPlaylist) {
@@ -209,16 +277,24 @@ public final class MainActivity extends Activity {
     private View videoCard(VideoStore.Video video) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(12), dp(12), dp(14));
+        card.setPadding(dp(7), dp(7), dp(7), dp(12));
         ImageView thumbnail = new ImageView(this);
         thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
         thumbnail.setBackgroundColor(Color.LTGRAY);
         thumbnail.setContentDescription("Náhled videa " + video.title);
         new ThumbnailLoader(thumbnail).execute("https://i.ytimg.com/vi/" + video.id + "/hqdefault.jpg");
-        card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(190)));
-        TextView label = title("▶  " + video.title, 19);
-        label.setPadding(dp(4), dp(12), dp(4), dp(5));
-        card.addView(label);
+        int imageHeight = Math.round((getResources().getDisplayMetrics().widthPixels / 4f - dp(26)) * 9f / 16f);
+        card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
+        String[] parts = video.title.split("  •  ", 2);
+        TextView label = title(parts[0], 17);
+        label.setMaxLines(2);
+        label.setPadding(dp(4), dp(10), dp(4), 0);
+        card.addView(label, new LinearLayout.LayoutParams(-1, dp(58)));
+        if (parts.length > 1) {
+            TextView channel = text(parts[1], 14, Color.LTGRAY);
+            channel.setPadding(dp(4), 0, dp(4), dp(4));
+            card.addView(channel);
+        }
         card.setBackgroundColor(SURFACE);
         card.setOnClickListener(v -> play(video));
         card.setFocusable(true);
@@ -226,10 +302,7 @@ public final class MainActivity extends Activity {
             v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start();
             v.setBackgroundColor(focused ? Color.rgb(92, 61, 10) : SURFACE);
         });
-        LinearLayout.LayoutParams params = wide();
-        params.setMargins(0, 0, 0, dp(16));
         card.setElevation(dp(3));
-        card.setLayoutParams(params);
         return card;
     }
 

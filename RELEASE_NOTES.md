@@ -1,6 +1,6 @@
-# Bezpečné video 0.1.6 – tmavá galerie videí
+# Bezpečné video 0.1.7 – televizní rozhraní ve stylu YouTube
 
-Aktualizace mění dětskou obrazovku na tmavou televizní galerii konkrétních videí.
+Aktualizace přibližuje dětskou obrazovku známému rozložení YouTube pro TV při zachování vlastní identity aplikace.
 
 ## Funkce
 
@@ -26,10 +26,15 @@ Aktualizace mění dětskou obrazovku na tmavou televizní galerii konkrétních
 - přímý výběr konkrétního videa po otevření profilu dítěte,
 - tmavý vzhled dětské i rodičovské části,
 - oranžové zvýraznění položky vybrané dálkovým ovladačem.
+- čtyři náhledy videí v jedné řadě,
+- horní lišta s logem a aktivním dětským profilem,
+- kategorie povolených kanálů,
+- název videa a kanálu pod každým náhledem,
+- zvětšení právě vybraného videa.
 
 ## Instalace
 
-V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.6.apk` ručně.
+V rodičovské správě použijte tlačítko aktualizace. Případně nainstalujte `BezpecneVideo-TV-0.1.7.apk` ručně.
 
 Výchozí rodičovský PIN je `2468`. Po prvním spuštění jej změňte.
 
