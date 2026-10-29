@@ -27,6 +27,8 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.
 
+Od verze 0.1.21 lze procházet celý veřejný archiv povolených kanálů po 50 položkách. Je potřeba vlastní YouTube Data API klíč: [návod k nastavení](ARCHIV_KANALU.md). Aplikace ukládá náhledy a seznamy do paměti a zachovává galerii při návratu z videa.
+
 ## Sestavení
 
 Otevřete složku v Android Studiu a spusťte konfiguraci `app`. Projekt vyžaduje JDK 17 a Android SDK 36.

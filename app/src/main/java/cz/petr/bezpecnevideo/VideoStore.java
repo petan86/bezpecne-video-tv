@@ -40,6 +40,10 @@ final class VideoStore {
         return result;
     }
 
+    String apiKey() { return prefs.getString("youtube_api_key", ""); }
+
+    void setApiKey(String key) { prefs.edit().putString("youtube_api_key", key.trim()).apply(); }
+
     List<Channel> channels(String profile) {
         List<Channel> result = new ArrayList<>();
         try {

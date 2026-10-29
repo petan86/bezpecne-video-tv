@@ -107,6 +107,8 @@ final class AppUpdater {
         startDownload(release);
     }
 
+    // The legacy overload is used only before Android 13; newer versions explicitly set EXPORTED.
+    @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void startDownload(Release release) {
         DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(release.url));

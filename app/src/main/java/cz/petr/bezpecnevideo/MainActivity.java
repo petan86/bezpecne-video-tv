@@ -41,6 +41,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -59,6 +62,13 @@ public final class MainActivity extends Activity {
     private String activeProfile;
     private String activeChannelFilter;
     private WebView webView;
+    private WebView retainedPlayer;
+    private View retainedLibrary;
+    private String requestedVideo;
+    private final ChannelCatalog catalog = new ChannelCatalog();
+    private final ExecutorService channelExecutor = Executors.newFixedThreadPool(3);
+    private final Map<String, List<VideoStore.Video>> channelCache = new ConcurrentHashMap<>();
+    private final Map<String, Long> channelCacheTime = new ConcurrentHashMap<>();
     private FrameLayout root;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
@@ -256,11 +266,27 @@ public final class MainActivity extends Activity {
 
     private void loadChannelFeed(String channelId, String channelTitle, int languagePriority, LinearLayout content,
                                  GridLayout grid, TextView loading, Set<String> displayed) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        if (!store.apiKey().isEmpty()) {
+            Button more = button("Načítám " + channelTitle + "…", NAVY);
+            content.addView(more, wide());
+            if (loading.getParent() == content) content.removeView(loading);
+            loadCatalogPage(channelId, channelTitle, languagePriority, "", content, grid, displayed, more);
+            return;
+        }
+        List<VideoStore.Video> cached = channelCache.get(channelId);
+        if (cached != null) {
+            for (VideoStore.Video video : cached) {
+                if (displayed.add(video.id)) addVideoToGrid(grid, video, languagePriority);
+            }
+            if (loading.getParent() == content) content.removeView(loading);
+            if (System.currentTimeMillis() - channelCacheTime.getOrDefault(channelId, 0L) < 300000) return;
+        }
+        channelExecutor.execute(() -> {
             List<VideoStore.Video> found = new ArrayList<>();
+            HttpURLConnection connection = null;
             try {
                 URL url = new URL("https://www.youtube.com/feeds/videos.xml?channel_id=" + channelId);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection = (HttpURLConnection) url.openConnection();
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
                 connection.setRequestProperty("User-Agent", "BezpecneVideo-TV");
@@ -281,16 +307,63 @@ public final class MainActivity extends Activity {
                         inEntry = false; videoId = null; videoTitle = null;
                     }
                 }
+                channelCache.put(channelId, new ArrayList<>(found));
+                channelCacheTime.put(channelId, System.currentTimeMillis());
             } catch (Exception ignored) { }
+            finally { if (connection != null) connection.disconnect(); }
             runOnUiThread(() -> {
-                if (content.getParent() == null) return;
+                if (!isCurrentLibrary(content)) return;
                 for (VideoStore.Video video : found) {
                     if (displayed.add(video.id)) addVideoToGrid(grid, video, languagePriority);
                 }
                 if (loading.getParent() == content) content.removeView(loading);
-                if (found.isEmpty() && content.getChildCount() <= 3)
-                    content.addView(text("Náhledy kanálu se nepodařilo načíst. Zkontrolujte internet.", 16, Color.LTGRAY), wide());
+                if (found.isEmpty() && cached == null)
+                    content.addView(text(channelTitle + ": videa se nepodařilo načíst. Zkuste kanál otevřít znovu.", 16, Color.LTGRAY), wide());
             });
+        });
+    }
+
+    private void loadCatalogPage(String channelId, String title, int priority, String token,
+                                 LinearLayout content, GridLayout grid, Set<String> displayed, Button more) {
+        more.setEnabled(false);
+        more.setText("Načítám " + title + "…");
+        String key = store.apiKey();
+        channelExecutor.execute(() -> {
+            try {
+                ChannelCatalog.Page page = catalog.load(key, channelId, title, token);
+                runOnUiThread(() -> {
+                    if (!isCurrentLibrary(content)) return;
+                    View firstNew = null;
+                    for (VideoStore.Video video : page.videos) {
+                        if (displayed.add(video.id)) {
+                            View added = addVideoToGrid(grid, video, priority);
+                            if (firstNew == null) firstNew = added;
+                        }
+                    }
+                    if (content.isAttachedToWindow() && !token.isEmpty() && firstNew != null) firstNew.requestFocus();
+                    more.setEnabled(true);
+                    if (page.next.isEmpty()) {
+                        more.setVisibility(View.GONE);
+                        if (page.videos.isEmpty() && token.isEmpty())
+                            content.addView(text(title + ": žádná veřejná videa.", 16, Color.LTGRAY), wide());
+                    } else {
+                        more.setText("Načíst další videa – " + title);
+                        more.setOnClickListener(v -> loadCatalogPage(channelId, title, priority, page.next,
+                                content, grid, displayed, more));
+                    }
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    if (!isCurrentLibrary(content)) return;
+                    more.setEnabled(true);
+                    more.setText("Zkusit znovu – " + title);
+                    more.setOnClickListener(v -> loadCatalogPage(channelId, title, priority, token,
+                            content, grid, displayed, more));
+                    Toast.makeText(this, error instanceof java.io.IOException
+                            ? "Nepodařilo se připojit k YouTube. Zkontrolujte internet."
+                            : "Archiv nelze načíst. Zkontrolujte API klíč, zapnutí služby a limit v Google Cloud.", Toast.LENGTH_LONG).show();
+                });
+            }
         });
     }
 
@@ -298,7 +371,12 @@ public final class MainActivity extends Activity {
         addVideoToGrid(grid, video, 0);
     }
 
-    private void addVideoToGrid(GridLayout grid, VideoStore.Video video, int languagePriority) {
+    private boolean isCurrentLibrary(View content) {
+        return !isDestroyed() && (content.isAttachedToWindow()
+                || (retainedLibrary != null && content.getParent() == retainedLibrary));
+    }
+
+    private View addVideoToGrid(GridLayout grid, VideoStore.Video video, int languagePriority) {
         View card = videoCard(video);
         card.setTag(languagePriority);
         int available = getResources().getDisplayMetrics().widthPixels - dp(72);
@@ -317,6 +395,7 @@ public final class MainActivity extends Activity {
             }
         }
         grid.addView(card, insertAt);
+        return card;
     }
 
     private View channelCard(String channelTitle, String uploadsPlaylist) {
@@ -361,14 +440,15 @@ public final class MainActivity extends Activity {
 
     private View videoCard(VideoStore.Video video) {
         LinearLayout card = new LinearLayout(this);
+        card.setContentDescription(video.title);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(7), dp(7), dp(7), dp(12));
         ImageView thumbnail = new ImageView(this);
         thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
         thumbnail.setBackgroundColor(Color.LTGRAY);
         thumbnail.setContentDescription("Náhled videa " + video.title);
-        new ThumbnailLoader(thumbnail).executeOnExecutor(android.os.AsyncTask.THREAD_POOL_EXECUTOR,
-                "https://i.ytimg.com/vi/" + video.id + "/hqdefault.jpg");
+        new ThumbnailLoader(thumbnail).executeOnExecutor(ThumbnailLoader.EXECUTOR,
+                "https://i.ytimg.com/vi/" + video.id + "/mqdefault.jpg");
         int imageHeight = Math.round((getResources().getDisplayMetrics().widthPixels / 4f - dp(26)) * 9f / 16f);
         card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
         String[] parts = video.title.split("  •  ", 2);
@@ -394,14 +474,30 @@ public final class MainActivity extends Activity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void play(VideoStore.Video video) {
-        webView = configuredWebView();
-        String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
-                "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
-                "<body><iframe " +
-                "src='https://www.youtube.com/embed/" + video.id + "?autoplay=1&playsinline=1&rel=0&hl=cs&cc_load_policy=0' " +
-                "title='YouTube video player' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
-        webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
+        if (!video.id.matches("[A-Za-z0-9_-]{11}")) return;
+        retainedLibrary = root.getChildAt(0);
+        requestedVideo = video.id;
+        if (retainedPlayer == null) {
+            retainedPlayer = configuredWebView();
+            retainedPlayer.setWebViewClient(new WebViewClient() {
+                @Override public void onPageFinished(WebView view, String url) { syncPlayer(); }
+            });
+            String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>"
+                    + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    + "<style>html,body,#player,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style>"
+                    + "</head><body><div id='player'></div><script>"
+                    + "var player,ready=false,wanted=null;"
+                    + "function selectVideo(id){wanted=id;if(ready){if(id)player.loadVideoById(id);else player.stopVideo();}}"
+                    + "function onYouTubeIframeAPIReady(){player=new YT.Player('player',{width:'100%',height:'100%',"
+                    + "playerVars:{playsinline:1,rel:0,hl:'cs',cc_load_policy:0,origin:'https://cz.petr.bezpecnevideo.app'},"
+                    + "events:{onReady:function(){ready=true;if(wanted)player.loadVideoById(wanted);}}});}"
+                    + "</script><script src='https://www.youtube.com/iframe_api'></script></body></html>";
+            retainedPlayer.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
+        }
+        webView = retainedPlayer;
+        if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
+        webView.onResume();
+        syncPlayer();
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
@@ -410,8 +506,46 @@ public final class MainActivity extends Activity {
     }
 
     private void closePlayer() {
-        if (webView != null) { webView.stopLoading(); webView.destroy(); webView = null; }
-        showLibrary();
+        if (webView == retainedPlayer && retainedPlayer != null) {
+            requestedVideo = null;
+            syncPlayer();
+            retainedPlayer.onPause();
+            if (retainedPlayer.getParent() instanceof ViewGroup)
+                ((ViewGroup) retainedPlayer.getParent()).removeView(retainedPlayer);
+            webView = null;
+            if (retainedLibrary != null) {
+                View library = retainedLibrary;
+                retainedLibrary = null;
+                render(library);
+                return;
+            }
+        } else if (webView != null) { webView.stopLoading(); webView.destroy(); webView = null; }
+        if (activeProfile != null) showLibrary(); else showProfilePicker();
+    }
+
+    private void syncPlayer() {
+        if (retainedPlayer != null) retainedPlayer.evaluateJavascript("if(window.selectVideo)selectVideo("
+                + (requestedVideo == null ? "null" : "'" + requestedVideo + "'") + ");", null);
+    }
+
+    @Override protected void onPause() {
+        requestedVideo = null;
+        syncPlayer();
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (webView != null) webView.onResume();
+    }
+
+    @Override protected void onDestroy() {
+        channelExecutor.shutdownNow();
+        if (webView != null && webView != retainedPlayer) webView.destroy();
+        if (retainedPlayer != null) retainedPlayer.destroy();
+        retainedLibrary = null;
+        super.onDestroy();
     }
 
     private void showParentArea() {
@@ -445,6 +579,11 @@ public final class MainActivity extends Activity {
         actions.addView(addFilipek, new LinearLayout.LayoutParams(0, dp(58), 1));
         content.addView(actions, wide());
         content.addView(space(28));
+        Button archive = button("Celý archiv kanálů – nastavit API klíč", NAVY);
+        archive.setOnClickListener(v -> configureCatalog());
+        content.addView(archive, wide());
+        content.addView(text(store.apiKey().isEmpty() ? "Zobrazuje se pouze krátký seznam nejnovějších videí."
+                : "Archiv je zapnutý: 50 videí na stránku a tlačítko Načíst další.", 13, Color.GRAY));
         Button premium = button("YouTube Premium – přihlášení a kontrola", Color.rgb(190, 30, 45));
         premium.setOnClickListener(v -> showPremiumLogin());
         content.addView(premium, wide());
@@ -476,6 +615,19 @@ public final class MainActivity extends Activity {
                 })
                 .setNegativeButton("Zrušit", null)
                 .show();
+    }
+
+    private void configureCatalog() {
+        EditText key = input("YouTube Data API klíč");
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        key.setText(store.apiKey());
+        new AlertDialog.Builder(this).setTitle("Celý archiv kanálů")
+                .setMessage("V Google Cloud zapněte YouTube Data API v3 a vytvořte API klíč. Klíč se uloží jen do této aplikace. Prázdné pole zapne původní seznam novinek.")
+                .setView(key).setPositiveButton("Uložit", (dialog, which) -> {
+                    store.setApiKey(key.getText().toString());
+                    catalog.clear();
+                    showParentArea();
+                }).setNegativeButton("Zrušit", null).show();
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -745,7 +897,12 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (customView != null) { webView.getWebChromeClient(); customViewCallback.onCustomViewHidden(); customView = null; showLibrary(); }
+        if (customView != null) {
+            customViewCallback.onCustomViewHidden();
+            customView = null;
+            customViewCallback = null;
+            closePlayer();
+        }
         else if (webView != null) closePlayer();
         else if (activeProfile != null) showProfilePicker();
         else super.onBackPressed();
