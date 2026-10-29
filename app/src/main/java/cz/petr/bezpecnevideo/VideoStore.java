@@ -56,7 +56,8 @@ final class VideoStore {
         return result;
     }
 
-    boolean addVideo(String profile, String url, String title) {
+    synchronized boolean addVideo(String profile, String url, String title) {
+        if (!MATYSEK.equals(profile) && !FILIPEK.equals(profile)) return false;
         String id = extractVideoId(url);
         if (id == null) return false;
         List<Video> current = videos(profile);
@@ -66,7 +67,7 @@ final class VideoStore {
         return true;
     }
 
-    void removeVideo(String profile, String id) {
+    synchronized void removeVideo(String profile, String id) {
         List<Video> current = videos(profile);
         current.removeIf(video -> video.id.equals(id));
         save(profile, current);
@@ -128,22 +129,34 @@ final class VideoStore {
     static String extractVideoId(String value) {
         if (value == null) return null;
         String text = value.trim();
-        String id = null;
-        if (text.matches("[A-Za-z0-9_-]{11}")) id = text;
-        else {
-            String[] markers = {"youtu.be/", "youtube.com/watch?v=", "youtube.com/shorts/", "youtube.com/embed/"};
-            for (String marker : markers) {
-                int start = text.indexOf(marker);
-                if (start >= 0) {
-                    start += marker.length();
-                    int end = start;
-                    while (end < text.length() && "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".indexOf(text.charAt(end)) >= 0) end++;
-                    id = text.substring(start, end);
-                    break;
+        if (text.matches("[A-Za-z0-9_-]{11}")) return text;
+        try {
+            if (!text.contains("://")) text = "https://" + text;
+            java.net.URI uri = new java.net.URI(text);
+            if (!("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getUserInfo() != null || uri.getPort() != -1) return null;
+            String host = uri.getHost();
+            if (host == null) return null;
+            host = host.toLowerCase(java.util.Locale.ROOT);
+            String path = uri.getPath(), id = null;
+            if ("youtu.be".equals(host) || "www.youtu.be".equals(host)) {
+                id = path.startsWith("/") ? path.substring(1) : path;
+            } else if ("youtube.com".equals(host) || "www.youtube.com".equals(host)
+                    || "m.youtube.com".equals(host) || "music.youtube.com".equals(host)) {
+                if ("/watch".equals(path) && uri.getRawQuery() != null) {
+                    for (String parameter : uri.getRawQuery().split("&")) {
+                        String[] parts = parameter.split("=", 2);
+                        if (parts.length == 2 && "v".equals(parts[0])) {
+                            id = java.net.URLDecoder.decode(parts[1], "UTF-8"); break;
+                        }
+                    }
+                } else {
+                    for (String prefix : new String[]{"/shorts/", "/embed/", "/live/"})
+                        if (path.startsWith(prefix)) id = path.substring(prefix.length());
                 }
             }
-        }
-        return id != null && id.matches("[A-Za-z0-9_-]{11}") ? id : null;
+            return id != null && id.matches("[A-Za-z0-9_-]{11}") ? id : null;
+        } catch (Exception ignored) { return null; }
     }
 
     private static String hash(String pin, String salt) {

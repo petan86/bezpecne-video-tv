@@ -27,6 +27,8 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 
 Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.
 
+Od verze 0.1.23 lze videa přidávat z telefonu: **Rodičovská správa → Přidat video z mobilu – QR kód**. Telefon a TV musí být na stejné domácí síti. [Návod k přidávání z mobilu](PRIDAVANI_Z_MOBILU.md).
+
 Od verze 0.1.21 lze procházet celý veřejný archiv povolených kanálů po 50 položkách. Je potřeba vlastní YouTube Data API klíč: [návod k nastavení](ARCHIV_KANALU.md). Aplikace ukládá náhledy a seznamy do paměti a zachovává galerii při návratu z videa.
 
 ## Galerie a pokračování (0.1.22)

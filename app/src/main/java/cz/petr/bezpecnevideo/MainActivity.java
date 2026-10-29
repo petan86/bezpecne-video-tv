@@ -25,6 +25,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -86,6 +87,10 @@ public final class MainActivity extends Activity {
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private boolean searchChoiceOpen;
+    private PhoneVideoServer phoneServer;
+    private boolean phoneScreen;
+    private Object phoneRequest;
+    private Runnable phoneTimeout;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -511,6 +516,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (phoneScreen) closePhoneAdd();
         playbackHandler.removeCallbacks(progressPoll);
         if (webView == retainedPlayer) captureProgress(true);
         requestedVideo = null;
@@ -529,6 +535,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        stopPhoneSession();
         playbackHandler.removeCallbacks(progressPoll);
         channelExecutor.shutdownNow();
         if (webView != null && webView != retainedPlayer) webView.destroy();
@@ -550,6 +557,11 @@ public final class MainActivity extends Activity {
     private void showParentArea() {
         LinearLayout content = page();
         content.addView(header("Rodičovská správa", "Hotovo", v -> showProfilePicker()));
+        Button phone = button("Přidat video z mobilu – QR kód", Color.rgb(230, 33, 23));
+        phone.setOnClickListener(v -> showPhoneAdd());
+        content.addView(phone, wide());
+        content.addView(text("Na mobilu vložíte odkaz z YouTube a vyberete dítě. Bez psaní ovladačem.", 15, Color.LTGRAY));
+        content.addView(space(16));
         content.addView(title("Přidat povolené video", 25));
         content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.LTGRAY));
         content.addView(space(12));
@@ -615,6 +627,89 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Zrušit", null)
                 .show();
     }
+
+    private void showPhoneAdd() {
+        stopPhoneSession();
+        phoneScreen = true;
+        Object request = new Object();
+        phoneRequest = request;
+        LinearLayout content = page();
+        content.setKeepScreenOn(true);
+        content.addView(header("Přidat video z mobilu", "Hotovo", v -> closePhoneAdd()));
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView qr = new ImageView(this);
+        qr.setContentDescription("QR kód pro jednorázové přidávání videí z mobilu");
+        row.addView(qr, new LinearLayout.LayoutParams(dp(250), dp(250)));
+        LinearLayout instructions = new LinearLayout(this);
+        instructions.setOrientation(LinearLayout.VERTICAL);
+        instructions.setPadding(dp(28), 0, 0, 0);
+        instructions.addView(title("Naskenuj QR kód fotoaparátem mobilu", 24));
+        instructions.addView(text("1. Mobil připoj ke stejné domácí Wi-Fi jako TV.\n2. Na YouTube: Sdílet → Kopírovat odkaz.\n3. V otevřené stránce vlož odkaz a vyber dítě.", 18, Color.WHITE));
+        instructions.addView(text("Nech tuto obrazovku otevřenou. Přístup skončí za 10 minut nebo po stisku Hotovo. Používej na své domácí síti.", 15, Color.LTGRAY));
+        TextView connection = text("Připravuji připojení…", 15, Color.LTGRAY);
+        instructions.addView(connection);
+        TextView received = text("", 16, Color.rgb(129, 228, 168));
+        received.setMaxLines(2);
+        instructions.addView(received);
+        row.addView(instructions, new LinearLayout.LayoutParams(0, -2, 1));
+        content.addView(row, wide());
+        render(scroll(content));
+        channelExecutor.execute(() -> {
+            PhoneVideoServer started = null;
+            try {
+                java.net.InetAddress address = PhonePairing.address(this);
+                if (address == null) throw new java.io.IOException("LAN unavailable");
+                started = new PhoneVideoServer(address, readAsset("phone.html"), readAsset("phone.js"),
+                        YouTubePreview::lookup, (profile, id, title) -> {
+                            boolean saved = store.addVideo(profile, id, title);
+                            if (saved) runOnUiThread(() -> {
+                                if (phoneScreen && phoneRequest == request)
+                                    received.setText("Povoleno " + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
+                            });
+                            return saved;
+                        });
+                android.graphics.Bitmap bitmap = PhonePairing.qr(started.link());
+                PhoneVideoServer server = started;
+                runOnUiThread(() -> {
+                    if (!phoneScreen || phoneRequest != request || isDestroyed()) { server.close(); return; }
+                    phoneServer = server;
+                    qr.setImageBitmap(bitmap);
+                    connection.setText("Připojení k TV: " + server.origin() + "\nPřístupový odkaz je v QR kódu.");
+                    phoneTimeout = () -> {
+                        if (phoneServer == server) {
+                            closePhoneAdd();
+                            Toast.makeText(this, "Přístup z mobilu vypršel. Pro další přidávání otevřete nový QR kód.", Toast.LENGTH_LONG).show();
+                        }
+                    };
+                    playbackHandler.postDelayed(phoneTimeout, 10 * 60 * 1000L);
+                });
+            } catch (Exception error) {
+                if (started != null) started.close();
+                runOnUiThread(() -> {
+                    if (!phoneScreen || phoneRequest != request || isDestroyed()) return;
+                    connection.setText("Připojení se nepodařilo připravit. Připoj TV k domácí Wi-Fi nebo kabelem, pak zkus QR kód znovu. Je potřeba místní IPv4 adresa.");
+                });
+            }
+        });
+    }
+
+    private String readAsset(String name) throws java.io.IOException {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(getAssets().open(name), "UTF-8"))) {
+            StringBuilder value = new StringBuilder(); String line;
+            while ((line = reader.readLine()) != null) value.append(line).append('\n');
+            return value.toString();
+        }
+    }
+
+    private void stopPhoneSession() {
+        phoneScreen = false;
+        phoneRequest = null;
+        if (phoneTimeout != null) { playbackHandler.removeCallbacks(phoneTimeout); phoneTimeout = null; }
+        if (phoneServer != null) { phoneServer.close(); phoneServer = null; }
+    }
+
+    private void closePhoneAdd() { stopPhoneSession(); showParentArea(); }
 
     private void configureCatalog() {
         EditText key = input("YouTube Data API klíč");
@@ -896,6 +991,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        if (phoneScreen) { closePhoneAdd(); return; }
         if (customView != null) {
             customViewCallback.onCustomViewHidden();
             customView = null;
