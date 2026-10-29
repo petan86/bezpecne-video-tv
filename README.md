@@ -29,7 +29,17 @@ Výchozí rodičovský PIN je `2468`; při prvním spuštění ho změňte.
 
 Od verze 0.1.21 lze procházet celý veřejný archiv povolených kanálů po 50 položkách. Je potřeba vlastní YouTube Data API klíč: [návod k nastavení](ARCHIV_KANALU.md). Aplikace ukládá náhledy a seznamy do paměti a zachovává galerii při návratu z videa.
 
-## Sestavení
+## Galerie a pokračování (0.1.22)
+
+Galerie vykresluje jen viditelné karty a blízké okolí. Náhledy mají paměťovou cache 8 MB a diskovou cache 32 MB s expirací po 7 dnech. Nejde o stahování samotných videí.
+
+Rozkoukaná videa se ukládají samostatně pro každý profil a objevují se nahoře v sekci **Pokračovat ve sledování**. Obvyklý stisk OK naváže na uložený čas (s návratem o dvě sekundy). Podržení OK otevře nabídku **Přehrát od začátku**. Po zhlédnutí alespoň 95 % se video označí jako zhlédnuté. Historie nikdy sama neuděluje povolení: po odebrání videa či kanálu se už takový obsah nenabízí.
+
+Ukládá se maximálně 100 záznamů na profil, na úvodní obrazovce je nejvýše 8 rozkoukaných videí. Stav se ukládá každých 5 sekund a při odchodu; při násilném ukončení může několik posledních sekund chybět. Živá vysílání, pokud je přehrávač rozpozná, se do pokračování neukládají. Tato funkce nevyžaduje API klíč.
+
+Ověření: `gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` a `node tests/player.test.cjs`. Na reálné TV zkontrolujte posouvání většího archivu, načtení další stránky, návrat z videa, podržení OK a rozdílné pozice stejného videa v obou profilech.
+
+## Sestavení aplikace
 
 Otevřete složku v Android Studiu a spusťte konfiguraci `app`. Projekt vyžaduje JDK 17 a Android SDK 36.
 

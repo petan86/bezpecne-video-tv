@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.net.Uri;
 import android.text.InputType;
 import android.view.Gravity;
@@ -22,8 +24,6 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -31,6 +31,7 @@ import android.widget.Toast;
 import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -57,8 +58,20 @@ public final class MainActivity extends Activity {
     private static final String CRUNCHLABS_CHANNEL = "UCY1kMZp36IQSyNx_9h4mpCg";
     private static final String EVERY_BRICK_CHANNEL = "UC_F-J5mjvV80iU9NVz32alg";
     private static final String KIDIBLI_CHANNEL = "UCUmv8pEGQInRObxBiB7ZMsg";
-    private static final String SLIVKI_UPLOADS = "UUAugiH1MZcHcsbnWv31JrOg";
     private VideoStore store;
+    private WatchHistory history;
+    private VideoGallery currentGallery;
+    private final Handler playbackHandler = new Handler(Looper.getMainLooper());
+    private PlaybackSession playbackSession;
+    private long playbackGeneration;
+    private final Runnable progressPoll = new Runnable() {
+        @Override public void run() {
+            if (webView == retainedPlayer && playbackSession != null) {
+                captureProgress(false);
+                playbackHandler.postDelayed(this, 5000);
+            }
+        }
+    };
     private String activeProfile;
     private String activeChannelFilter;
     private WebView webView;
@@ -77,6 +90,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         store = new VideoStore(this);
+        history = new WatchHistory(this);
         root = new FrameLayout(this);
         setContentView(root);
         warmUpYouTube();
@@ -99,6 +113,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showProfilePicker() {
+        currentGallery = null;
         activeProfile = null;
         LinearLayout page = page();
         page.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -138,25 +153,25 @@ public final class MainActivity extends Activity {
                 if ("16LuvR2CARA".equals(video.id)) { alreadyAdded = true; break; }
             }
             if (!alreadyAdded) videos.add(new VideoStore.Video("16LuvR2CARA",
-                    "Inside Disney’s Secret Engineering Lab  •  CrunchLabs – český dabing"));
+                    "Inside Disney’s Secret Engineering Lab  •  CrunchLabs – český dabing", CRUNCHLABS_CHANNEL));
         }
         LinearLayout content = page();
         content.addView(tvHomeHeader());
         content.addView(space(12));
         content.addView(categoryRow());
         content.addView(space(18));
-        content.addView(title("Doporučeno pro tebe", 27));
-        content.addView(space(12));
-        GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(4);
-        grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
-        grid.setUseDefaultMargins(false);
-        content.addView(grid, wide());
-        for (VideoStore.Video video : videos) addVideoToGrid(grid, video);
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.VERTICAL);
+        VideoGallery grid = new VideoGallery(this, content, footer, this::play, this::videoOptions);
+        currentGallery = grid;
+        content = footer;
+        content.setTag(grid);
+        grid.addVideos(videos, 0);
+        refreshHistory();
         TextView loading = text("Načítám náhledy z povolených kanálů…", 17, Color.LTGRAY);
         loading.setPadding(0, dp(24), 0, dp(24));
         content.addView(loading, wide());
-        render(scroll(content));
+        render(grid);
         Set<String> displayed = new HashSet<>();
         for (VideoStore.Video video : videos) displayed.add(video.id);
         int channelCount = 0;
@@ -199,6 +214,35 @@ public final class MainActivity extends Activity {
 
     private boolean isChannelVisible(String channelId) {
         return activeChannelFilter == null || activeChannelFilter.equals(channelId);
+    }
+
+    private boolean isVideoAllowed(String profile, VideoStore.Video video) {
+        if (profile == null) return false;
+        for (VideoStore.Video approved : store.videos(profile)) if (approved.id.equals(video.id)) return true;
+        String channel = video.channelId;
+        if (VideoStore.MATYSEK.equals(profile) && (SLIVKI_CHANNEL.equals(channel)
+                || CRUNCHLABS_CHANNEL.equals(channel) || EVERY_BRICK_CHANNEL.equals(channel))) return true;
+        if (VideoStore.FILIPEK.equals(profile) && (PAW_PATROL_CZECH_CHANNEL.equals(channel) || KIDIBLI_CHANNEL.equals(channel))) return true;
+        for (VideoStore.Channel approved : store.channels(profile)) if (approved.id.equals(channel)) return true;
+        return false;
+    }
+
+    private void refreshHistory() {
+        if (currentGallery == null || activeProfile == null) return;
+        List<WatchHistory.Entry> all = history.entries(activeProfile);
+        List<WatchHistory.Entry> continuing = new ArrayList<>();
+        for (WatchHistory.Entry entry : all) {
+            if (!entry.completed && isVideoAllowed(activeProfile, entry.video)
+                    && isChannelVisible(entry.video.channelId)) continuing.add(entry);
+        }
+        currentGallery.history(all, continuing);
+    }
+
+    private void videoOptions(VideoStore.Video video) {
+        WatchHistory.Entry entry = history.find(activeProfile, video.id);
+        new AlertDialog.Builder(this).setTitle(video.title.split("  •  ", 2)[0])
+                .setItems(new String[]{entry != null && !entry.completed ? "Pokračovat od " + VideoGallery.time(entry.position) : "Přehrát",
+                        "Přehrát od začátku"}, (dialog, which) -> play(video, which == 1)).show();
     }
 
     private View tvHomeHeader() {
@@ -265,7 +309,7 @@ public final class MainActivity extends Activity {
     }
 
     private void loadChannelFeed(String channelId, String channelTitle, int languagePriority, LinearLayout content,
-                                 GridLayout grid, TextView loading, Set<String> displayed) {
+                                 VideoGallery grid, TextView loading, Set<String> displayed) {
         if (!store.apiKey().isEmpty()) {
             Button more = button("Načítám " + channelTitle + "…", NAVY);
             content.addView(more, wide());
@@ -275,9 +319,8 @@ public final class MainActivity extends Activity {
         }
         List<VideoStore.Video> cached = channelCache.get(channelId);
         if (cached != null) {
-            for (VideoStore.Video video : cached) {
-                if (displayed.add(video.id)) addVideoToGrid(grid, video, languagePriority);
-            }
+            grid.addVideos(cached, languagePriority);
+            for (VideoStore.Video video : cached) displayed.add(video.id);
             if (loading.getParent() == content) content.removeView(loading);
             if (System.currentTimeMillis() - channelCacheTime.getOrDefault(channelId, 0L) < 300000) return;
         }
@@ -303,7 +346,7 @@ public final class MainActivity extends Activity {
                     else if (event == XmlPullParser.START_TAG && inEntry && "title".equals(name)) videoTitle = parser.nextText();
                     else if (event == XmlPullParser.END_TAG && "entry".equals(name)) {
                         if (videoId != null) found.add(new VideoStore.Video(videoId,
-                                (videoTitle == null ? "Video" : videoTitle) + "  •  " + channelTitle));
+                                (videoTitle == null ? "Video" : videoTitle) + "  •  " + channelTitle, channelId));
                         inEntry = false; videoId = null; videoTitle = null;
                     }
                 }
@@ -313,9 +356,8 @@ public final class MainActivity extends Activity {
             finally { if (connection != null) connection.disconnect(); }
             runOnUiThread(() -> {
                 if (!isCurrentLibrary(content)) return;
-                for (VideoStore.Video video : found) {
-                    if (displayed.add(video.id)) addVideoToGrid(grid, video, languagePriority);
-                }
+                grid.addVideos(found, languagePriority);
+                for (VideoStore.Video video : found) displayed.add(video.id);
                 if (loading.getParent() == content) content.removeView(loading);
                 if (found.isEmpty() && cached == null)
                     content.addView(text(channelTitle + ": videa se nepodařilo načíst. Zkuste kanál otevřít znovu.", 16, Color.LTGRAY), wide());
@@ -324,7 +366,7 @@ public final class MainActivity extends Activity {
     }
 
     private void loadCatalogPage(String channelId, String title, int priority, String token,
-                                 LinearLayout content, GridLayout grid, Set<String> displayed, Button more) {
+                                 LinearLayout content, VideoGallery grid, Set<String> displayed, Button more) {
         more.setEnabled(false);
         more.setText("Načítám " + title + "…");
         String key = store.apiKey();
@@ -333,14 +375,14 @@ public final class MainActivity extends Activity {
                 ChannelCatalog.Page page = catalog.load(key, channelId, title, token);
                 runOnUiThread(() -> {
                     if (!isCurrentLibrary(content)) return;
-                    View firstNew = null;
+                    String firstNew = null;
                     for (VideoStore.Video video : page.videos) {
                         if (displayed.add(video.id)) {
-                            View added = addVideoToGrid(grid, video, priority);
-                            if (firstNew == null) firstNew = added;
+                            if (firstNew == null) firstNew = video.id;
                         }
                     }
-                    if (content.isAttachedToWindow() && !token.isEmpty() && firstNew != null) firstNew.requestFocus();
+                    grid.addVideos(page.videos, priority);
+                    if (grid.isAttachedToWindow() && !token.isEmpty() && firstNew != null) grid.focusVideo(firstNew);
                     more.setEnabled(true);
                     if (page.next.isEmpty()) {
                         more.setVisibility(View.GONE);
@@ -367,114 +409,28 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void addVideoToGrid(GridLayout grid, VideoStore.Video video) {
-        addVideoToGrid(grid, video, 0);
-    }
 
     private boolean isCurrentLibrary(View content) {
-        return !isDestroyed() && (content.isAttachedToWindow()
-                || (retainedLibrary != null && content.getParent() == retainedLibrary));
+        return !isDestroyed() && content.getTag() == currentGallery
+                && (root.getChildAt(0) == currentGallery || retainedLibrary == currentGallery);
     }
 
-    private View addVideoToGrid(GridLayout grid, VideoStore.Video video, int languagePriority) {
-        View card = videoCard(video);
-        card.setTag(languagePriority);
-        int available = getResources().getDisplayMetrics().widthPixels - dp(72);
-        int width = Math.max(dp(220), available / 4);
-        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-        params.width = width - dp(14);
-        params.height = GridLayout.LayoutParams.WRAP_CONTENT;
-        params.setMargins(dp(7), dp(7), dp(7), dp(16));
-        card.setLayoutParams(params);
-        int insertAt = grid.getChildCount();
-        for (int i = 0; i < grid.getChildCount(); i++) {
-            Object tag = grid.getChildAt(i).getTag();
-            if (tag instanceof Integer && (Integer) tag > languagePriority) {
-                insertAt = i;
-                break;
-            }
-        }
-        grid.addView(card, insertAt);
-        return card;
-    }
-
-    private View channelCard(String channelTitle, String uploadsPlaylist) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(24), dp(18), dp(24), dp(18));
-        card.setBackgroundColor(Color.rgb(230, 33, 23));
-        TextView icon = text("▶", 38, Color.WHITE);
-        icon.setGravity(Gravity.CENTER);
-        TextView labels = text(channelTitle + "\nVšechna videa z povoleného kanálu", 20, Color.WHITE);
-        labels.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        card.addView(icon, new LinearLayout.LayoutParams(dp(80), dp(80)));
-        card.addView(labels, new LinearLayout.LayoutParams(0, dp(90), 1));
-        card.setFocusable(true);
-        card.setContentDescription("Otevřít povolený kanál " + channelTitle);
-        card.setOnClickListener(v -> playChannel(channelTitle, uploadsPlaylist));
-        card.setOnFocusChangeListener((v, focused) -> v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start());
-        LinearLayout.LayoutParams params = wide();
-        params.setMargins(0, 0, 0, dp(18));
-        card.setLayoutParams(params);
-        card.setElevation(dp(4));
-        return card;
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private void playChannel(String channelTitle, String uploadsPlaylist) {
-        webView = configuredWebView();
-        String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
-                "<style>html,body{width:100%;height:100%;margin:0;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head>" +
-                "<body><iframe " +
-                "src='https://www.youtube.com/embed/videoseries?list=" + uploadsPlaylist + "&autoplay=1&playsinline=1&rel=0&hl=cs&cc_load_policy=0' " +
-                "title='" + channelTitle.replace("'", "") + "' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>";
-        webView.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
-        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
-        render(shell);
-    }
-
-    private View videoCard(VideoStore.Video video) {
-        LinearLayout card = new LinearLayout(this);
-        card.setContentDescription(video.title);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(7), dp(7), dp(7), dp(12));
-        ImageView thumbnail = new ImageView(this);
-        thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        thumbnail.setBackgroundColor(Color.LTGRAY);
-        thumbnail.setContentDescription("Náhled videa " + video.title);
-        new ThumbnailLoader(thumbnail).executeOnExecutor(ThumbnailLoader.EXECUTOR,
-                "https://i.ytimg.com/vi/" + video.id + "/mqdefault.jpg");
-        int imageHeight = Math.round((getResources().getDisplayMetrics().widthPixels / 4f - dp(26)) * 9f / 16f);
-        card.addView(thumbnail, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
-        String[] parts = video.title.split("  •  ", 2);
-        TextView label = title(parts[0], 17);
-        label.setMaxLines(2);
-        label.setPadding(dp(4), dp(10), dp(4), 0);
-        card.addView(label, new LinearLayout.LayoutParams(-1, dp(58)));
-        if (parts.length > 1) {
-            TextView channel = text(parts[1], 14, Color.LTGRAY);
-            channel.setPadding(dp(4), 0, dp(4), dp(4));
-            card.addView(channel);
-        }
-        card.setBackgroundColor(SURFACE);
-        card.setOnClickListener(v -> play(video));
-        card.setFocusable(true);
-        card.setOnFocusChangeListener((v, focused) -> {
-            v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(120).start();
-            v.setBackgroundColor(focused ? Color.rgb(92, 61, 10) : SURFACE);
-        });
-        card.setElevation(dp(3));
-        return card;
-    }
 
     @SuppressLint("SetJavaScriptEnabled")
     private void play(VideoStore.Video video) {
+        play(video, false);
+    }
+
+    private void play(VideoStore.Video video, boolean fromBeginning) {
         if (!video.id.matches("[A-Za-z0-9_-]{11}")) return;
+        if (!isVideoAllowed(activeProfile, video)) {
+            Toast.makeText(this, "Toto video už není povolené.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (fromBeginning) history.remove(activeProfile, video.id);
+        WatchHistory.Entry saved = history.find(activeProfile, video.id);
+        playbackSession = new PlaybackSession(++playbackGeneration, activeProfile, video,
+                saved == null ? 0 : saved.resumeAt());
         retainedLibrary = root.getChildAt(0);
         requestedVideo = video.id;
         if (retainedPlayer == null) {
@@ -486,11 +442,7 @@ public final class MainActivity extends Activity {
                     + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                     + "<style>html,body,#player,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style>"
                     + "</head><body><div id='player'></div><script>"
-                    + "var player,ready=false,wanted=null;"
-                    + "function selectVideo(id){wanted=id;if(ready){if(id)player.loadVideoById(id);else player.stopVideo();}}"
-                    + "function onYouTubeIframeAPIReady(){player=new YT.Player('player',{width:'100%',height:'100%',"
-                    + "playerVars:{playsinline:1,rel:0,hl:'cs',cc_load_policy:0,origin:'https://cz.petr.bezpecnevideo.app'},"
-                    + "events:{onReady:function(){ready=true;if(wanted)player.loadVideoById(wanted);}}});}"
+                    + playerScript()
                     + "</script><script src='https://www.youtube.com/iframe_api'></script></body></html>";
             retainedPlayer.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
         }
@@ -503,12 +455,41 @@ public final class MainActivity extends Activity {
         shell.setBackgroundColor(Color.BLACK);
         shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         render(shell);
+        playbackHandler.removeCallbacks(progressPoll);
+        playbackHandler.postDelayed(progressPoll, 1000);
+    }
+
+    private String playerScript() {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(getAssets().open("player.js"), "UTF-8"))) {
+            StringBuilder script = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) script.append(line).append('\n');
+            return script.toString();
+        } catch (java.io.IOException error) { throw new IllegalStateException("Missing player script", error); }
+    }
+
+    private void captureProgress(boolean pause) {
+        PlaybackSession captured = playbackSession;
+        if (retainedPlayer == null || captured == null) return;
+        retainedPlayer.evaluateJavascript("window.playbackSnapshot ? playbackSnapshot(" + pause + ") : null", value -> {
+            if (isDestroyed() || captured.generation != playbackGeneration) return;
+            try {
+                JSONObject snapshot = new JSONObject(value);
+                if (!captured.video.id.equals(snapshot.optString("id"))
+                        || snapshot.optLong("session", -1) != captured.generation
+                        || !isVideoAllowed(captured.profile, captured.video)) return;
+                history.save(captured.profile, captured.video, snapshot.getDouble("position"),
+                        snapshot.getDouble("duration"), snapshot.optBoolean("ended"));
+                if (pause && captured.profile.equals(activeProfile)) refreshHistory();
+            } catch (Exception ignored) { }
+        });
     }
 
     private void closePlayer() {
         if (webView == retainedPlayer && retainedPlayer != null) {
+            playbackHandler.removeCallbacks(progressPoll);
+            captureProgress(true);
             requestedVideo = null;
-            syncPlayer();
             retainedPlayer.onPause();
             if (retainedPlayer.getParent() instanceof ViewGroup)
                 ((ViewGroup) retainedPlayer.getParent()).removeView(retainedPlayer);
@@ -525,12 +506,14 @@ public final class MainActivity extends Activity {
 
     private void syncPlayer() {
         if (retainedPlayer != null) retainedPlayer.evaluateJavascript("if(window.selectVideo)selectVideo("
-                + (requestedVideo == null ? "null" : "'" + requestedVideo + "'") + ");", null);
+                + (requestedVideo == null ? "null" : "'" + requestedVideo + "'") + ","
+                + (playbackSession == null ? 0 : playbackSession.start) + "," + playbackGeneration + ");", null);
     }
 
     @Override protected void onPause() {
+        playbackHandler.removeCallbacks(progressPoll);
+        if (webView == retainedPlayer) captureProgress(true);
         requestedVideo = null;
-        syncPlayer();
         if (webView != null) webView.onPause();
         super.onPause();
     }
@@ -538,14 +521,30 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        if (webView == retainedPlayer && playbackSession != null) {
+            retainedPlayer.evaluateJavascript("if(window.resumeTracking)resumeTracking();", null);
+            playbackHandler.removeCallbacks(progressPoll);
+            playbackHandler.postDelayed(progressPoll, 1000);
+        }
     }
 
     @Override protected void onDestroy() {
+        playbackHandler.removeCallbacks(progressPoll);
         channelExecutor.shutdownNow();
         if (webView != null && webView != retainedPlayer) webView.destroy();
         if (retainedPlayer != null) retainedPlayer.destroy();
         retainedLibrary = null;
         super.onDestroy();
+    }
+
+    private static final class PlaybackSession {
+        final long generation;
+        final String profile;
+        final VideoStore.Video video;
+        final double start;
+        PlaybackSession(long generation, String profile, VideoStore.Video video, double start) {
+            this.generation = generation; this.profile = profile; this.video = video; this.start = start;
+        }
     }
 
     private void showParentArea() {

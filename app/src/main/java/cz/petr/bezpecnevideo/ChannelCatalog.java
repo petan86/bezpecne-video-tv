@@ -46,7 +46,7 @@ final class ChannelCatalog {
             if (!channel.equals(snippet.optString("videoOwnerChannelId"))) continue;
             String id = snippet.getJSONObject("resourceId").optString("videoId");
             if (!id.matches("[A-Za-z0-9_-]{11}")) continue;
-            videos.add(new VideoStore.Video(id, snippet.getString("title") + "  •  " + title));
+            videos.add(new VideoStore.Video(id, snippet.getString("title") + "  •  " + title, channel));
         }
         Page page = new Page(videos, response.optString("nextPageToken"));
         if (token.isEmpty()) firstPages.put(cacheKey, page);

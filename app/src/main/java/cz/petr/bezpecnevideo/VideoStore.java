@@ -159,7 +159,11 @@ final class VideoStore {
     static final class Video {
         final String id;
         final String title;
-        Video(String id, String title) { this.id = id; this.title = title; }
+        final String channelId;
+        Video(String id, String title) { this(id, title, ""); }
+        Video(String id, String title, String channelId) {
+            this.id = id; this.title = title; this.channelId = channelId;
+        }
     }
 
     static final class Channel {

@@ -22,7 +22,7 @@ Soukromá a smazaná videa se nezobrazují. Veřejné video může mít zvlášt
 
 ## Rychlost
 
-Seznamy jsou v paměti aplikace po dobu pěti minut, náhledy mají omezenou mezipaměť 8 MB. Po návratu z videa se zachová otevřená galerie. Přehrávač se opakovaně používá a při opuštění obrazovky se zastaví. Mezipaměť není offline stahování videí a po ukončení aplikace se ztratí.
+Seznamy jsou v paměti aplikace po dobu pěti minut, náhledy mají omezenou mezipaměť 8 MB. Od verze 0.1.22 se náhledy ukládají také na disk (32 MB, nejvýše 7 dní) a galerie opakovaně používá karty mimo obrazovku. Po návratu z videa se zachová otevřená galerie. Přehrávač se opakovaně používá a při opuštění obrazovky se pozastaví. Mezipaměť není offline stahování videí; disková část přežije ukončení aplikace.
 
 Vložený YouTube přehrávač si nadále řídí kvalitu a buffer sám. Vynucení 720p ani velikosti bufferu tato verze neslibuje. Rychlost a ovládání je třeba ověřit na cílovém Chromecastu.
 
