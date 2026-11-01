@@ -445,13 +445,44 @@ public final class MainActivity extends Activity {
         requestedVideo = video.id;
         PlaybackSession captured = playbackSession;
         nativePlayer = new NativeYouTubePlayer(this, video.id, playbackSession.start,
-                (position, duration, ended) -> {
+                new NativeYouTubePlayer.Listener() {
+                @Override public void onProgress(double position, double duration, boolean ended) {
                     if (captured.generation == playbackGeneration && isVideoAllowed(captured.profile, captured.video))
                         history.save(captured.profile, captured.video, position, duration, ended);
+                }
+                @Override public void onError(String detail) {
+                    if (captured.generation == playbackGeneration && nativePlayer != null)
+                        showIframeFallback(captured);
+                }
                 });
         render(nativePlayer);
         playbackHandler.removeCallbacks(progressPoll);
         playbackHandler.postDelayed(progressPoll, 1000);
+    }
+
+    private void showIframeFallback(PlaybackSession captured) {
+        playbackHandler.removeCallbacks(progressPoll);
+        if (nativePlayer != null) { nativePlayer.release(); nativePlayer = null; }
+        requestedVideo = captured.video.id;
+        if (retainedPlayer == null) {
+            retainedPlayer = configuredWebView();
+            retainedPlayer.setWebViewClient(new WebViewClient() {
+                @Override public void onPageFinished(WebView view, String url) { syncPlayer(); }
+            });
+            String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>"
+                    + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    + "<style>html,body,#player,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style>"
+                    + "</head><body><div id='player'></div><script>" + playerScript()
+                    + "</script><script src='https://www.youtube.com/iframe_api'></script></body></html>";
+            retainedPlayer.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
+        }
+        webView = retainedPlayer;
+        if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
+        webView.onResume(); syncPlayer();
+        LinearLayout shell = new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.BLACK); shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        render(shell); playbackHandler.postDelayed(progressPoll, 1000);
+        Toast.makeText(this, "Nativní stream nebyl dostupný, používám záložní přehrávač.", Toast.LENGTH_LONG).show();
     }
 
     private String playerScript() {

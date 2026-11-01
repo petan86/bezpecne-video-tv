@@ -17,6 +17,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
@@ -34,6 +35,7 @@ import org.schabi.newpipe.extractor.stream.VideoStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -42,7 +44,10 @@ import java.util.concurrent.Executors;
 
 /** Native, D-pad friendly YouTube playback backed by Media3 and NewPipe Extractor. */
 final class NativeYouTubePlayer extends FrameLayout {
-    interface Listener { void onProgress(double positionSeconds, double durationSeconds, boolean ended); }
+    interface Listener {
+        void onProgress(double positionSeconds, double durationSeconds, boolean ended);
+        void onError(String detail);
+    }
 
     private static boolean extractorReady;
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
@@ -59,6 +64,7 @@ final class NativeYouTubePlayer extends FrameLayout {
     private int selectedQuality;
     private int selectedSubtitle = -1;
     private long initialPositionMs;
+    private boolean errorReported;
 
     NativeYouTubePlayer(Context context, String videoId, double startSeconds, Listener listener) {
         super(context);
@@ -135,7 +141,7 @@ final class NativeYouTubePlayer extends FrameLayout {
                     qualityButton.requestFocus();
                 });
             } catch (Exception error) {
-                post(() -> { loading.setVisibility(GONE); message.setText("Video se nepodařilo načíst.\n" + safeMessage(error)); });
+                post(() -> reportError("extrakce: " + safeMessage(error)));
             }
         });
     }
@@ -148,7 +154,13 @@ final class NativeYouTubePlayer extends FrameLayout {
 
     private void playSelection(long positionMs) {
         if (player != null) player.release();
-        DefaultDataSource.Factory data = new DefaultDataSource.Factory(getContext());
+        HashMap<String, String> headers = new HashMap<>();
+        headers.put("Referer", "https://www.youtube.com/");
+        headers.put("Origin", "https://www.youtube.com");
+        DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 Chrome/131 Safari/537.36")
+                .setAllowCrossProtocolRedirects(true).setDefaultRequestProperties(headers);
+        DefaultDataSource.Factory data = new DefaultDataSource.Factory(getContext(), http);
         DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(data);
         VideoStream video = qualities.get(selectedQuality);
         MediaItem.Builder videoItem = new MediaItem.Builder().setUri(video.getContent());
@@ -165,6 +177,11 @@ final class NativeYouTubePlayer extends FrameLayout {
             source = new MergingMediaSource(source, audio);
         }
         player = new ExoPlayer.Builder(getContext()).build();
+        player.addListener(new Player.Listener() {
+            @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                reportError("Media3: " + error.getErrorCodeName() + " – " + safeMessage(error));
+            }
+        });
         playerView.setPlayer(player); player.setMediaSource(source); player.prepare();
         player.seekTo(positionMs); player.setPlayWhenReady(true);
         qualityButton.setText("Kvalita: " + qualityLabel(video));
@@ -198,6 +215,12 @@ final class NativeYouTubePlayer extends FrameLayout {
                 player.getPlaybackState() == Player.STATE_ENDED);
     }
     void resumePlayback() { if (player != null) player.play(); }
+    private void reportError(String detail) {
+        if (errorReported) return;
+        errorReported = true; loading.setVisibility(GONE);
+        message.setVisibility(VISIBLE); message.setText("Nativní stream selhal, přepínám na záložní přehrávač…\n" + detail);
+        listener.onError(detail);
+    }
 
     void release() { reportProgress(true); if (player != null) { player.release(); player = null; } loader.shutdownNow(); }
     private long position() { return player == null ? initialPositionMs : player.getCurrentPosition(); }
