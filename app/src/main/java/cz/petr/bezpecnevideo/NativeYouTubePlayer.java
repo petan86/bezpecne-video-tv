@@ -120,7 +120,7 @@ final class NativeYouTubePlayer extends FrameLayout {
                 found.addAll(info.getVideoStreams()); found.addAll(info.getVideoOnlyStreams());
                 found.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
                 found.sort(Comparator.comparingInt(NativeYouTubePlayer::height).reversed()
-                        .thenComparingInt(VideoStream::getFps).reversed());
+                        .thenComparing(Comparator.comparingInt(VideoStream::getFps).reversed()));
                 Set<String> labels = new HashSet<>();
                 List<VideoStream> unique = new ArrayList<>();
                 for (VideoStream stream : found) {
@@ -158,7 +158,7 @@ final class NativeYouTubePlayer extends FrameLayout {
         headers.put("Referer", "https://www.youtube.com/");
         headers.put("Origin", "https://www.youtube.com");
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
-                .setUserAgent("Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 Chrome/131 Safari/537.36")
+                .setUserAgent(ExtractorDownloader.USER_AGENT)
                 .setAllowCrossProtocolRedirects(true).setDefaultRequestProperties(headers);
         DefaultDataSource.Factory data = new DefaultDataSource.Factory(getContext(), http);
         DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(data);
