@@ -21,6 +21,9 @@ fieldset{border:0;padding:0;margin:20px 0}legend{font-weight:600;margin-bottom:1
 .profiles input:checked+span{border-color:#ff5959;background:#442021}.profiles input:focus-visible+span{outline:3px solid white}
 #preview{border-top:1px solid #363a43;margin-top:24px;padding-top:24px}img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:#282c34}
 #author{font-size:14px;margin:8px 0}#status{padding:14px 0;line-height:1.5;white-space:pre-line}
+.manage{margin-top:34px;border-top:1px solid #363a43;padding-top:20px}.manage h2{margin-bottom:8px}
+.profile-list{margin:16px 0 28px}.item{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #30343e}
+.item span{flex:1;min-width:0}.item button{width:auto;min-height:40px;padding:8px 12px;margin:0;background:#713236}
 .success{color:#81e4a8}.error{color:#ff9898}.hint{font-size:14px} [hidden]{display:none!important}
 </style>
 <script src="/phone.js" defer></script>
@@ -47,5 +50,8 @@ fieldset{border:0;padding:0;margin:20px 0}legend{font-weight:600;margin-bottom:1
 <button id="another" class="secondary" type="button" hidden>Přidat další video</button>
 </section>
 <div id="status" role="status" aria-live="polite"></div>
-<p class="hint">TV a mobil musí být na stejné domácí síti. Nech na TV otevřený QR kód. Přístup platí 10 minut a skončí také při zavření této obrazovky na TV.</p>
+<section class="manage"><h2>Povolený obsah</h2><p>Odebrání se ihned uloží do TV.</p>
+<button id="refresh" class="secondary" type="button">Obnovit seznam</button>
+<div id="managed"></div></section>
+<p class="hint">TV a počítač musí být na stejné domácí síti. Přístup nemá časové omezení a zůstává aktivní, dokud běží aplikace v TV. Adresu nesdílejte mimo domácnost.</p>
 </main></body></html>

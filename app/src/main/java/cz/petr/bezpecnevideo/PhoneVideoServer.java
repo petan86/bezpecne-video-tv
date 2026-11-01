@@ -26,10 +26,15 @@ import java.util.concurrent.TimeUnit;
 final class PhoneVideoServer implements AutoCloseable {
     interface Lookup { JSONObject find(String id) throws Exception; }
     interface Save { boolean add(String profile, String id, String title); }
+    interface Administration {
+        JSONObject list() throws Exception;
+        boolean remove(String profile, String type, String id);
+    }
     private final ServerSocket listener;
     private final String html, script, token, host;
     private final Lookup lookup;
     private final Save save;
+    private final Administration administration;
     private final long expiresAt;
     private final Object lifecycle = new Object();
     private final Set<Socket> clients = ConcurrentHashMap.newKeySet();
@@ -38,17 +43,24 @@ final class PhoneVideoServer implements AutoCloseable {
             new ArrayBlockingQueue<>(8), runnable -> { Thread thread = new Thread(runnable, "phone-request"); thread.setDaemon(true); return thread; });
 
     PhoneVideoServer(InetAddress address, String html, String script, Lookup lookup, Save save) throws IOException {
-        this(address, html, script, lookup, save, TimeUnit.MINUTES.toMillis(10));
+        this(address, html, script, lookup, save, null, TimeUnit.MINUTES.toMillis(10));
     }
 
     PhoneVideoServer(InetAddress address, String html, String script, Lookup lookup, Save save, long durationMs) throws IOException {
+        this(address, html, script, lookup, save, null, durationMs);
+    }
+
+    PhoneVideoServer(InetAddress address, String html, String script, Lookup lookup, Save save,
+                     Administration administration, long durationMs) throws IOException {
         this.html = html; this.script = script; this.lookup = lookup; this.save = save;
+        this.administration = administration;
         byte[] bytes = new byte[24]; new SecureRandom().nextBytes(bytes);
         token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         listener = new ServerSocket(0, 8, address);
         listener.setSoTimeout(1000);
         host = address.getHostAddress() + ":" + listener.getLocalPort();
-        expiresAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(durationMs);
+        expiresAt = durationMs < 0 ? Long.MAX_VALUE
+                : System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(durationMs);
         Thread thread = new Thread(this::accept, "phone-session");
         thread.setDaemon(true);
         thread.start();
@@ -95,7 +107,20 @@ final class PhoneVideoServer implements AutoCloseable {
                     respond(client, 415, "application/json", error("Neplatný formát požadavku.")); return;
                 }
                 JSONObject data = new JSONObject(request.body);
-                if ("/api/preview".equals(request.path)) {
+                if ("/api/list".equals(request.path)) {
+                    if (administration == null) { respond(client, 404, "application/json", error("Správa není dostupná.")); return; }
+                    respond(client, 200, "application/json", administration.list().toString());
+                } else if ("/api/remove".equals(request.path)) {
+                    if (administration == null) { respond(client, 404, "application/json", error("Správa není dostupná.")); return; }
+                    String profile = data.optString("profile"), type = data.optString("type"), id = data.optString("id");
+                    boolean validProfile = "matysek".equals(profile) || "filipek".equals(profile);
+                    boolean validId = ("video".equals(type) && id.matches("[A-Za-z0-9_-]{11}"))
+                            || ("channel".equals(type) && id.matches("UC[A-Za-z0-9_-]{22}"));
+                    if (!validProfile || !validId) { respond(client, 400, "application/json", error("Neplatná položka.")); return; }
+                    boolean removed = administration.remove(profile, type, id);
+                    respond(client, removed ? 200 : 500, "application/json",
+                            removed ? new JSONObject().put("ok", true).toString() : error("Odebrání se nepodařilo."));
+                } else if ("/api/preview".equals(request.path)) {
                     String id = VideoStore.extractVideoId(data.optString("url"));
                     if (id == null) { respond(client, 400, "application/json", error("Vložte odkaz na konkrétní YouTube video.")); return; }
                     JSONObject result;

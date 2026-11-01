@@ -110,6 +110,26 @@ public class PhoneVideoServerTest {
             assertTrue(response.contains("warning")); assertTrue(response.contains("16LuvR2CARA"));
         }
     }
+    @Test public void authenticatedParentCanListAndRemoveAllowedContent() throws Exception {
+        List<String> removed = new ArrayList<>();
+        PhoneVideoServer.Administration administration = new PhoneVideoServer.Administration() {
+            @Override public JSONObject list() throws Exception {
+                return new JSONObject().put("matysek", new JSONObject().put("videos", "listed"));
+            }
+            @Override public boolean remove(String profile, String type, String id) {
+                removed.add(profile + ":" + type + ":" + id); return true;
+            }
+        };
+        try (PhoneVideoServer server = new PhoneVideoServer(InetAddress.getByName("127.0.0.1"), "", "",
+                id -> new JSONObject(), (profile, id, title) -> true, administration, 60000)) {
+            assertTrue(post(server, "/api/list", "{}").contains("listed"));
+            assertTrue(post(server, "/api/remove", "{\"profile\":\"matysek\",\"type\":\"video\",\"id\":\"16LuvR2CARA\"}")
+                    .startsWith("HTTP/1.1 200"));
+            assertEquals(Collections.singletonList("matysek:video:16LuvR2CARA"), removed);
+            assertTrue(post(server, "/api/remove", "{\"profile\":\"matysek\",\"type\":\"video\",\"id\":\"bad\"}")
+                    .startsWith("HTTP/1.1 400"));
+        }
+    }
     @Test public void parserRejectsOversizedTruncatedAndAmbiguousRequests() {
         for (String headers : new String[]{"Content-Length: 9000\r\n", "Content-Length: 4\r\n",
                 "Content-Length: 0\r\nContent-Length: 1\r\n", "Transfer-Encoding: chunked\r\n"}) {

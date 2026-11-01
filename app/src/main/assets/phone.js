@@ -67,7 +67,36 @@ byId('add').addEventListener('click', async () => {
 byId('another').addEventListener('click', () => {
     selectedId = null; preview.hidden = true; urlInput.value = ''; message(''); urlInput.focus();
 });
+function itemRow(profile, type, item) {
+    const row = document.createElement('div'); row.className = 'item';
+    const label = document.createElement('span'); label.textContent = item.title || item.id;
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Odebrat';
+    remove.addEventListener('click', async () => {
+        remove.disabled = true;
+        try { await api('/api/remove', {profile, type, id: item.id}); await loadManaged(); }
+        catch (error) { message(error.message, 'error'); remove.disabled = false; }
+    });
+    row.append(label, remove); return row;
+}
+async function loadManaged() {
+    if (!token) return;
+    const root = byId('managed'); byId('refresh').disabled = true;
+    try {
+        const data = await api('/api/list', {}); root.textContent = '';
+        for (const [profile, name] of [['matysek', 'Matýsek'], ['filipek', 'Filípek']]) {
+            const heading = document.createElement('h3'); heading.textContent = name; root.append(heading);
+            const list = document.createElement('div'); list.className = 'profile-list';
+            const entries = [...(data[profile]?.videos || []).map(x => ['video', x]),
+                ...(data[profile]?.channels || []).map(x => ['channel', x])];
+            if (!entries.length) { const empty = document.createElement('p'); empty.textContent = 'Žádné ručně přidané položky.'; list.append(empty); }
+            for (const [type, item] of entries) list.append(itemRow(profile, type, item));
+            root.append(list);
+        }
+    } catch (error) { message(error.message, 'error'); }
+    finally { byId('refresh').disabled = false; }
+}
+byId('refresh').addEventListener('click', loadManaged);
 if (!token) {
     byId('previewButton').disabled = true;
     message('Nejprve v rodičovské správě na TV otevři „Přidat video z mobilu“ a naskenuj QR kód.', 'error');
-}
+} else loadManaged();

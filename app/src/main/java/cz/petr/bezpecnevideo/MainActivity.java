@@ -33,6 +33,7 @@ import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -55,7 +56,7 @@ public final class MainActivity extends Activity {
     private static final int DARK = Color.rgb(14, 16, 21);
     private static final int SURFACE = Color.rgb(28, 31, 38);
     private static final String SLIVKI_CHANNEL = "UCAugiH1MZcHcsbnWv31JrOg";
-    private static final String PAW_PATROL_CZECH_CHANNEL = "UCSVSJ1OCSv5ClFgKFTHIDew";
+    private static final String PAW_PATROL_CZECH_CHANNEL = "UCW1ve7KG4v-MSKkaf0Oq1Mg";
     private static final String CRUNCHLABS_CHANNEL = "UCY1kMZp36IQSyNx_9h4mpCg";
     private static final String EVERY_BRICK_CHANNEL = "UC_F-J5mjvV80iU9NVz32alg";
     private static final String KIDIBLI_CHANNEL = "UCUmv8pEGQInRObxBiB7ZMsg";
@@ -64,10 +65,14 @@ public final class MainActivity extends Activity {
     private VideoGallery currentGallery;
     private final Handler playbackHandler = new Handler(Looper.getMainLooper());
     private PlaybackSession playbackSession;
+    private NativeYouTubePlayer nativePlayer;
     private long playbackGeneration;
     private final Runnable progressPoll = new Runnable() {
         @Override public void run() {
-            if (webView == retainedPlayer && playbackSession != null) {
+            if (nativePlayer != null && playbackSession != null) {
+                nativePlayer.reportProgress(false);
+                playbackHandler.postDelayed(this, 5000);
+            } else if (webView == retainedPlayer && playbackSession != null) {
                 captureProgress(false);
                 playbackHandler.postDelayed(this, 5000);
             }
@@ -90,7 +95,7 @@ public final class MainActivity extends Activity {
     private PhoneVideoServer phoneServer;
     private boolean phoneScreen;
     private Object phoneRequest;
-    private Runnable phoneTimeout;
+    private TextView phoneReceived;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -283,7 +288,7 @@ public final class MainActivity extends Activity {
             row.addView(categoryChip("Every Brick", EVERY_BRICK_CHANNEL.equals(activeChannelFilter), EVERY_BRICK_CHANNEL));
         }
         if (VideoStore.FILIPEK.equals(activeProfile)) {
-            row.addView(categoryChip("Tlapková patrola", PAW_PATROL_CZECH_CHANNEL.equals(activeChannelFilter), PAW_PATROL_CZECH_CHANNEL));
+            row.addView(categoryChip("Tlapková patrola – česky", PAW_PATROL_CZECH_CHANNEL.equals(activeChannelFilter), PAW_PATROL_CZECH_CHANNEL));
             row.addView(categoryChip("Kidibli", KIDIBLI_CHANNEL.equals(activeChannelFilter), KIDIBLI_CHANNEL));
         }
         for (VideoStore.Channel channel : store.channels(activeProfile))
@@ -438,28 +443,13 @@ public final class MainActivity extends Activity {
                 saved == null ? 0 : saved.resumeAt());
         retainedLibrary = root.getChildAt(0);
         requestedVideo = video.id;
-        if (retainedPlayer == null) {
-            retainedPlayer = configuredWebView();
-            retainedPlayer.setWebViewClient(new WebViewClient() {
-                @Override public void onPageFinished(WebView view, String url) { syncPlayer(); }
-            });
-            String html = "<!doctype html><html><head><meta name='referrer' content='strict-origin-when-cross-origin'>"
-                    + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                    + "<style>html,body,#player,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style>"
-                    + "</head><body><div id='player'></div><script>"
-                    + playerScript()
-                    + "</script><script src='https://www.youtube.com/iframe_api'></script></body></html>";
-            retainedPlayer.loadDataWithBaseURL("https://cz.petr.bezpecnevideo.app/", html, "text/html", "UTF-8", null);
-        }
-        webView = retainedPlayer;
-        if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
-        webView.onResume();
-        syncPlayer();
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
-        shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
-        render(shell);
+        PlaybackSession captured = playbackSession;
+        nativePlayer = new NativeYouTubePlayer(this, video.id, playbackSession.start,
+                (position, duration, ended) -> {
+                    if (captured.generation == playbackGeneration && isVideoAllowed(captured.profile, captured.video))
+                        history.save(captured.profile, captured.video, position, duration, ended);
+                });
+        render(nativePlayer);
         playbackHandler.removeCallbacks(progressPoll);
         playbackHandler.postDelayed(progressPoll, 1000);
     }
@@ -491,7 +481,13 @@ public final class MainActivity extends Activity {
     }
 
     private void closePlayer() {
-        if (webView == retainedPlayer && retainedPlayer != null) {
+        if (nativePlayer != null) {
+            playbackHandler.removeCallbacks(progressPoll);
+            nativePlayer.release(); nativePlayer = null; requestedVideo = null;
+            if (retainedLibrary != null) {
+                View library = retainedLibrary; retainedLibrary = null; render(library); refreshHistory(); return;
+            }
+        } else if (webView == retainedPlayer && retainedPlayer != null) {
             playbackHandler.removeCallbacks(progressPoll);
             captureProgress(true);
             requestedVideo = null;
@@ -518,6 +514,7 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() {
         if (phoneScreen) closePhoneAdd();
         playbackHandler.removeCallbacks(progressPoll);
+        if (nativePlayer != null) nativePlayer.reportProgress(true);
         if (webView == retainedPlayer) captureProgress(true);
         requestedVideo = null;
         if (webView != null) webView.onPause();
@@ -526,6 +523,11 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (nativePlayer != null) {
+            nativePlayer.resumePlayback();
+            playbackHandler.removeCallbacks(progressPoll);
+            playbackHandler.postDelayed(progressPoll, 1000);
+        }
         if (webView != null) webView.onResume();
         if (webView == retainedPlayer && playbackSession != null) {
             retainedPlayer.evaluateJavascript("if(window.resumeTracking)resumeTracking();", null);
@@ -538,6 +540,7 @@ public final class MainActivity extends Activity {
         stopPhoneSession();
         playbackHandler.removeCallbacks(progressPoll);
         channelExecutor.shutdownNow();
+        if (nativePlayer != null) { nativePlayer.release(); nativePlayer = null; }
         if (webView != null && webView != retainedPlayer) webView.destroy();
         if (retainedPlayer != null) retainedPlayer.destroy();
         retainedLibrary = null;
@@ -557,10 +560,10 @@ public final class MainActivity extends Activity {
     private void showParentArea() {
         LinearLayout content = page();
         content.addView(header("Rodičovská správa", "Hotovo", v -> showProfilePicker()));
-        Button phone = button("Přidat video z mobilu – QR kód", Color.rgb(230, 33, 23));
+        Button phone = button("Správa z PC nebo mobilu – IP adresa / QR", Color.rgb(230, 33, 23));
         phone.setOnClickListener(v -> showPhoneAdd());
         content.addView(phone, wide());
-        content.addView(text("Na mobilu vložíte odkaz z YouTube a vyberete dítě. Bez psaní ovladačem.", 15, Color.LTGRAY));
+        content.addView(text("V prohlížeči na stejné síti lze videa přidávat, prohlížet a odebírat.", 15, Color.LTGRAY));
         content.addView(space(16));
         content.addView(title("Přidat povolené video", 25));
         content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.LTGRAY));
@@ -629,7 +632,6 @@ public final class MainActivity extends Activity {
     }
 
     private void showPhoneAdd() {
-        stopPhoneSession();
         phoneScreen = true;
         Object request = new Object();
         phoneRequest = request;
@@ -646,10 +648,11 @@ public final class MainActivity extends Activity {
         instructions.setPadding(dp(28), 0, 0, 0);
         instructions.addView(title("Naskenuj QR kód fotoaparátem mobilu", 24));
         instructions.addView(text("1. Mobil připoj ke stejné domácí Wi-Fi jako TV.\n2. Na YouTube: Sdílet → Kopírovat odkaz.\n3. V otevřené stránce vlož odkaz a vyber dítě.", 18, Color.WHITE));
-        instructions.addView(text("Nech tuto obrazovku otevřenou. Přístup skončí za 10 minut nebo po stisku Hotovo. Používej na své domácí síti.", 15, Color.LTGRAY));
+        instructions.addView(text("Přístup nemá časový limit a pokračuje i po stisku Hotovo. Ukončí se až s aplikací. Používej jen na své domácí síti.", 15, Color.LTGRAY));
         TextView connection = text("Připravuji připojení…", 15, Color.LTGRAY);
         instructions.addView(connection);
         TextView received = text("", 16, Color.rgb(129, 228, 168));
+        phoneReceived = received;
         received.setMaxLines(2);
         instructions.addView(received);
         row.addView(instructions, new LinearLayout.LayoutParams(0, -2, 1));
@@ -658,31 +661,34 @@ public final class MainActivity extends Activity {
         channelExecutor.execute(() -> {
             PhoneVideoServer started = null;
             try {
-                java.net.InetAddress address = PhonePairing.address(this);
-                if (address == null) throw new java.io.IOException("LAN unavailable");
-                started = new PhoneVideoServer(address, readAsset("phone.html"), readAsset("phone.js"),
-                        YouTubePreview::lookup, (profile, id, title) -> {
-                            boolean saved = store.addVideo(profile, id, title);
-                            if (saved) runOnUiThread(() -> {
-                                if (phoneScreen && phoneRequest == request)
-                                    received.setText("Povoleno " + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
-                            });
-                            return saved;
-                        });
+                started = phoneServer;
+                if (started == null || !started.isOpen()) {
+                    java.net.InetAddress address = PhonePairing.address(this);
+                    if (address == null) throw new java.io.IOException("LAN unavailable");
+                    started = new PhoneVideoServer(address, readAsset("phone.html"), readAsset("phone.js"),
+                            YouTubePreview::lookup, (profile, id, title) -> {
+                                boolean saved = store.addVideo(profile, id, title);
+                                if (saved) runOnUiThread(() -> {
+                                    if (phoneReceived != null)
+                                        phoneReceived.setText("Povoleno " + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
+                                });
+                                return saved;
+                            }, new PhoneVideoServer.Administration() {
+                                @Override public JSONObject list() { return remoteParentList(); }
+                                @Override public boolean remove(String profile, String type, String id) {
+                                    if ("video".equals(type)) store.removeVideo(profile, id);
+                                    else store.removeChannel(profile, id);
+                                    return true;
+                                }
+                            }, -1);
+                }
                 android.graphics.Bitmap bitmap = PhonePairing.qr(started.link());
                 PhoneVideoServer server = started;
                 runOnUiThread(() -> {
                     if (!phoneScreen || phoneRequest != request || isDestroyed()) { server.close(); return; }
                     phoneServer = server;
                     qr.setImageBitmap(bitmap);
-                    connection.setText("Připojení k TV: " + server.origin() + "\nPřístupový odkaz je v QR kódu.");
-                    phoneTimeout = () -> {
-                        if (phoneServer == server) {
-                            closePhoneAdd();
-                            Toast.makeText(this, "Přístup z mobilu vypršel. Pro další přidávání otevřete nový QR kód.", Toast.LENGTH_LONG).show();
-                        }
-                    };
-                    playbackHandler.postDelayed(phoneTimeout, 10 * 60 * 1000L);
+                    connection.setText("Na PC otevřete: " + server.link() + "\nOdkaz funguje jen v domácí síti a obsahuje dočasný přístupový klíč.");
                 });
             } catch (Exception error) {
                 if (started != null) started.close();
@@ -702,14 +708,34 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private JSONObject remoteParentList() {
+        JSONObject result = new JSONObject();
+        try {
+            for (String profile : new String[]{VideoStore.MATYSEK, VideoStore.FILIPEK}) {
+                JSONArray videos = new JSONArray(), channels = new JSONArray();
+                for (VideoStore.Video video : store.videos(profile))
+                    videos.put(new JSONObject().put("id", video.id).put("title", video.title));
+                for (VideoStore.Channel channel : store.channels(profile))
+                    channels.put(new JSONObject().put("id", channel.id).put("title", channel.title));
+                result.put(profile, new JSONObject().put("videos", videos).put("channels", channels));
+            }
+        } catch (Exception ignored) { }
+        return result;
+    }
+
     private void stopPhoneSession() {
         phoneScreen = false;
         phoneRequest = null;
-        if (phoneTimeout != null) { playbackHandler.removeCallbacks(phoneTimeout); phoneTimeout = null; }
+        phoneReceived = null;
         if (phoneServer != null) { phoneServer.close(); phoneServer = null; }
     }
 
-    private void closePhoneAdd() { stopPhoneSession(); showParentArea(); }
+    private void closePhoneAdd() {
+        phoneScreen = false;
+        phoneRequest = null;
+        phoneReceived = null;
+        showParentArea();
+    }
 
     private void configureCatalog() {
         EditText key = input("YouTube Data API klíč");
@@ -842,10 +868,10 @@ public final class MainActivity extends Activity {
                         String line;
                         while ((line = reader.readLine()) != null) html.append(line);
                     }
-                    Matcher idMatcher = Pattern.compile("\\\"channelId\\\":\\\"(UC[A-Za-z0-9_-]{22})\\\"").matcher(html);
-                    if (idMatcher.find()) channelId = idMatcher.group(1);
-                    Matcher titleMatcher = Pattern.compile("<meta property=\\\"og:title\\\" content=\\\"([^\\\"]+)\\\"").matcher(html);
-                    if (titleMatcher.find()) channelTitle = titleMatcher.group(1);
+                    connection.disconnect();
+                    VideoStore.Channel resolved = ChannelIdentity.fromPage(html.toString());
+                    channelId = resolved.id;
+                    channelTitle = resolved.title;
                 }
                 if (channelId == null) throw new IllegalStateException("ID kanálu nebylo nalezeno");
                 String finalId = channelId;
@@ -998,7 +1024,7 @@ public final class MainActivity extends Activity {
             customViewCallback = null;
             closePlayer();
         }
-        else if (webView != null) closePlayer();
+        else if (nativePlayer != null || webView != null) closePlayer();
         else if (activeProfile != null) showProfilePicker();
         else super.onBackPressed();
     }

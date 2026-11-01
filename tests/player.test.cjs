@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const script = fs.readFileSync('app/src/main/assets/player.js', 'utf8');
 function setup() {
-  let events, id = '', position = 0, duration = 600, paused = 0;
+  let events, id = '', position = 0, duration = 600, paused = 0, now = 1000;
   const loads = [];
   const fake = {
     loadVideoById(args) { loads.push(args); id = args.videoId; position = args.startSeconds; },
@@ -11,12 +11,24 @@ function setup() {
     getVideoData() { return {video_id: id}; },
     getCurrentTime() { return position; }, getDuration() { return duration; }
   };
-  const context = vm.createContext({YT: {Player: function(_, config) { events = config.events; return fake; }}});
+  const context = vm.createContext({Date: {now: () => now}, YT: {Player: function(_, config) { events = config.events; return fake; }}});
   vm.runInContext(script, context);
   context.onYouTubeIframeAPIReady();
   return {context, loads, ready: () => events.onReady(), playing: () => events.onStateChange({data: 1}),
+    buffering: () => events.onStateChange({data: 3}), advance: ms => now += ms,
     ended: () => events.onStateChange({data: 0}), position: v => position = v, id: v => id = v,
     paused: () => paused};
+}
+{
+  const t = setup();
+  t.context.selectVideo('16LuvR2CARA', 40, 1); t.ready(); t.playing();
+  t.position(80); t.buffering(); t.advance(14999);
+  assert.equal(t.context.recoverStalledPlayback(15999), false);
+  t.advance(2);
+  assert.equal(t.context.recoverStalledPlayback(16001), true);
+  assert.equal(t.loads.at(-1).startSeconds, 78, 'stalled stream resumes slightly before last position');
+  t.buffering(); t.advance(20000);
+  assert.equal(t.context.recoverStalledPlayback(36001), false, 'only one automatic retry per video session');
 }
 {
   const t = setup();

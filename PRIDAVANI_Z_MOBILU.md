@@ -13,7 +13,7 @@ Není potřeba další účet ani YouTube Data API klíč. Samotný náhled vide
 
 Stránku poskytuje přímo TV v domácí síti přes HTTP. Používejte důvěryhodnou domácí síť; přenos není šifrovaný. Stránka nevyžaduje heslo ke Google účtu, PIN ani API klíč. Přístupový odkaz vzniká až po odemčení rodičovské správy a umožňuje pouze náhled a přidání videa. QR kód nesdílejte s dětmi ani jinými osobami, kterým nechcete přidávání povolit.
 
-QR odkaz platí nejvýše 10 minut. Zavření obrazovky, přechod do jiné TV aplikace nebo ukončení aplikace přístup ukončí. Potom otevřete nový QR kód. Nový kód má jiný přístupový token; samotná IP adresa na TV přidávání nepovoluje.
+QR/IP odkaz nemá časové omezení a zůstává dostupný po dobu běhu aplikace v TV, také po zavření obrazovky s QR kódem. Ukončení procesu aplikace přístup ukončí; po jejím dalším spuštění otevřete rodičovskou správu a zjistěte nový odkaz. Odkaz obsahuje přístupový token, proto jej nesdílejte mimo domácnost.
 
 ## Když se stránka neotevře
 

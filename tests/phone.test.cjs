@@ -6,12 +6,13 @@ const script = fs.readFileSync('app/src/main/assets/phone.js', 'utf8');
 function setup(hasToken = true) {
     const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], {
         value: '', hidden: true, disabled: false, events: {},
-        addEventListener(event, fn) { this.events[event] = fn; },
+        addEventListener(event, fn) { this.events[event] = fn; }, append(...children) { this.children = (this.children || []).concat(children); },
         scrollIntoView() {}, focus() {}
     }]));
     const selectedProfile = {value: 'filipek'}, requests = [], stored = new Map();
     let fail = false;
-    const context = vm.createContext({document: {getElementById: id => nodes.get(id), querySelector: () => selectedProfile},
+    const context = vm.createContext({document: {getElementById: id => nodes.get(id), querySelector: () => selectedProfile,
+        createElement: () => ({events: {}, addEventListener(event, fn) { this.events[event] = fn; }, append(...children) { this.children = children; }})},
         location: {hash: hasToken ? '#' + 'a'.repeat(32) : ''}, history: {replaceState() {}},
         sessionStorage: {setItem: (k, v) => stored.set(k, v), getItem: k => stored.get(k)},
         setTimeout, clearTimeout, AbortController, TypeError,
@@ -19,7 +20,8 @@ function setup(hasToken = true) {
             requests.push({path, ...options});
             if (fail) throw new TypeError('network');
             return {ok: true, json: async () => path.endsWith('preview')
-                ? {id: '16LuvR2CARA', title: 'Test title', author: '<script>not executed</script>'} : {ok: true}};
+                ? {id: '16LuvR2CARA', title: 'Test title', author: '<script>not executed</script>'}
+                : path.endsWith('list') ? {matysek: {videos: [], channels: []}, filipek: {videos: [], channels: []}} : {ok: true}};
         }
     });
     vm.runInContext(script, context);
@@ -32,15 +34,17 @@ function setup(hasToken = true) {
     assert.equal(t.nodes.get('preview').hidden, false);
     assert.equal(t.nodes.get('title').value, 'Test title');
     assert.equal(t.nodes.get('author').textContent, '<script>not executed</script>');
-    assert.equal(t.requests[0].headers.Authorization, 'Bearer ' + 'a'.repeat(32));
+    const previewRequest = t.requests.find(request => request.path.endsWith('/preview'));
+    assert.equal(previewRequest.headers.Authorization, 'Bearer ' + 'a'.repeat(32));
     await t.nodes.get('add').events.click();
-    assert.equal(JSON.parse(t.requests[1].body).profile, 'filipek');
+    const addRequest = t.requests.find(request => request.path.endsWith('/add'));
+    assert.equal(JSON.parse(addRequest.body).profile, 'filipek');
     assert.match(t.nodes.get('status').textContent, /Filípkovi/);
     t.nodes.get('another').events.click();
     assert.equal(t.nodes.get('url').value, '');
     assert.equal(t.nodes.get('preview').hidden, true);
     await t.nodes.get('add').events.click();
-    assert.equal(t.requests.length, 2, 'reset must not submit previous video');
+    assert.equal(t.requests.filter(request => request.path.endsWith('/add')).length, 1, 'reset must not submit previous video');
     const missing = setup(false);
     assert.equal(missing.nodes.get('previewButton').disabled, true);
     const offline = setup(); offline.fail();

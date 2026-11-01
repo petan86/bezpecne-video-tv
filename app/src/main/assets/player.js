@@ -1,11 +1,14 @@
 var player, ready = false, wanted = null, startAt = 0, session = 0;
 var loadedSession = -1, played = false, finished = false, suspended = false;
+var bufferingSince = 0, recoveryCount = 0;
 
 function loadWanted() {
     if (!ready || !wanted || suspended || loadedSession === session) return;
     loadedSession = session;
     played = false;
     finished = false;
+    bufferingSince = 0;
+    recoveryCount = 0;
     player.loadVideoById({videoId: wanted, startSeconds: startAt});
 }
 
@@ -21,6 +24,7 @@ function selectVideo(id, seconds, generation) {
 function playbackSnapshot(pause) {
     if (pause) suspended = true;
     if (!ready) return null;
+    recoverStalledPlayback(Date.now());
     var data = player.getVideoData(), result = null;
     if (played && data && data.video_id === wanted && !data.isLive) {
         var position = player.getCurrentTime(), duration = player.getDuration();
@@ -30,6 +34,20 @@ function playbackSnapshot(pause) {
     }
     if (pause) player.pauseVideo();
     return result;
+}
+
+// Android TV WebView can occasionally remain in BUFFERING even after the
+// connection has recovered. Retry once from the last known position instead
+// of leaving the child on a permanently spinning player.
+function recoverStalledPlayback(now) {
+    if (!ready || suspended || !wanted || !bufferingSince || recoveryCount >= 1
+            || now - bufferingSince < 15000) return false;
+    var data = player.getVideoData(), position = player.getCurrentTime();
+    if (!data || data.video_id !== wanted || !isFinite(position)) return false;
+    recoveryCount++;
+    bufferingSince = 0;
+    player.loadVideoById({videoId: wanted, startSeconds: Math.max(0, position - 2)});
+    return true;
 }
 
 function resumeTracking() { suspended = false; }
@@ -46,6 +64,8 @@ function onYouTubeIframeAPIReady() {
                 var data = player.getVideoData();
                 if (!data || data.video_id !== wanted) return;
                 if (event.data === 1) { played = true; finished = false; }
+                if (event.data === 1) bufferingSince = 0;
+                if (event.data === 3 && !bufferingSince) bufferingSince = Date.now();
                 if (event.data === 0 && played) finished = true;
             }
         }

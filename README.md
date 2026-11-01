@@ -8,7 +8,7 @@ Vlastní rodičovská aplikace pro Android TV / Google TV s ručně povolenými 
 - samostatný seznam povolených videí pro každé dítě,
 - rodičovská část chráněná PINem,
 - přidání videa běžným YouTube odkazem,
-- přehrávání pomocí oficiálního vloženého YouTube přehrávače,
+- nativní přehrávání přes Media3 a NewPipe Extractor s TV nabídkou kvality a titulků,
 - televizní launcher, landscape rozhraní a ovládání dálkovým ovladačem,
 - přednastavený povolený kanál Toto je Slivki pro Matýska,
 - vyhledávání videí přímo z rodičovské správy bez opisování odkazu,
@@ -45,6 +45,20 @@ Ověření: `gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` a
 
 Otevřete složku v Android Studiu a spusťte konfiguraci `app`. Projekt vyžaduje JDK 17 a Android SDK 36.
 
+## Nativní přehrávač
+
+Při přehrávání jsou dole dvě velká tlačítka ovladatelná D-padem: **Kvalita** nabízí
+dostupná rozlišení, snímkovou frekvenci a kodek; **Titulky** umožní vybrat stopu nebo
+titulky vypnout. Přehrávač umí spojit samostatnou video a zvukovou stopu, takže může
+nabídnout i rozlišení nad 720p.
+
+## Licence
+
+Projekt je distribuován pod GPL-3.0-or-later, viz [LICENSE.md](LICENSE.md). Používá
+NewPipe Extractor (GPL-3.0-or-later) a AndroidX Media3.
+
 ## Důležité
 
-Aplikace neblokuje reklamy a neupravuje YouTube stream. Premium výhody závisejí na tom, zda YouTube rozpozná přihlášený účet ve vloženém přehrávači. Tuto část je nutné ověřit na cílovém telefonu.
+Nativní engine používá neoficiální rozhraní YouTube. Změny na straně YouTube proto
+mohou vyžadovat aktualizaci NewPipe Extractoru. Přihlášení k YouTube Premium zůstává
+oddělené a na nativní přehrávání se nevztahuje.
