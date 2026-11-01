@@ -116,9 +116,18 @@ final class NativeYouTubePlayer extends FrameLayout {
             try {
                 initializeExtractor();
                 StreamInfo info = StreamInfo.getInfo("https://www.youtube.com/watch?v=" + videoId);
+                audios = new ArrayList<>(info.getAudioStreams());
+                audios.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
+                audios.sort(AudioPreference.ORDER);
                 List<VideoStream> found = new ArrayList<>();
                 found.addAll(info.getVideoStreams()); found.addAll(info.getVideoOnlyStreams());
                 found.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
+                // Muxed video has its own audio, which may be in another language.
+                // Use separate video so the preferred Czech track is actually played.
+                if (!audios.isEmpty() && AudioPreference.isCzech(audios.get(0))
+                        && found.stream().anyMatch(VideoStream::isVideoOnly)) {
+                    found.removeIf(stream -> !stream.isVideoOnly());
+                }
                 found.sort(Comparator.comparingInt(NativeYouTubePlayer::height).reversed()
                         .thenComparing(Comparator.comparingInt(VideoStream::getFps).reversed()));
                 Set<String> labels = new HashSet<>();
@@ -128,9 +137,7 @@ final class NativeYouTubePlayer extends FrameLayout {
                     if (labels.add(key)) unique.add(stream);
                 }
                 if (unique.isEmpty()) throw new IllegalStateException("YouTube neposkytl použitelnou video stopu.");
-                qualities = unique; audios = new ArrayList<>(info.getAudioStreams());
-                audios.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
-                audios.sort(Comparator.comparingInt(AudioStream::getAverageBitrate).reversed());
+                qualities = unique;
                 subtitles = new ArrayList<>(info.getSubtitles());
                 subtitles.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
                 selectedQuality = defaultQuality(qualities);
