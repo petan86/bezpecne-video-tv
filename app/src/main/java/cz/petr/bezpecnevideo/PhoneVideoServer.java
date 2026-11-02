@@ -52,11 +52,19 @@ final class PhoneVideoServer implements AutoCloseable {
 
     PhoneVideoServer(InetAddress address, String html, String script, Lookup lookup, Save save,
                      Administration administration, long durationMs) throws IOException {
-        this.html = html; this.script = script; this.lookup = lookup; this.save = save;
+        this(address, html, script, lookup, save, administration, durationMs, 0, false);
+    }
+
+    PhoneVideoServer(InetAddress address, String html, String script, Lookup lookup, Save save,
+                     Administration administration, long durationMs, int port, boolean directAccess) throws IOException {
+        this.html = html; this.lookup = lookup; this.save = save;
         this.administration = administration;
         byte[] bytes = new byte[24]; new SecureRandom().nextBytes(bytes);
         token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        listener = new ServerSocket(0, 8, address);
+        this.script = script.replace("__LAN_SESSION_TOKEN__", directAccess ? token : "");
+        listener = new ServerSocket();
+        listener.setReuseAddress(true);
+        listener.bind(new java.net.InetSocketAddress(address, port), 8);
         listener.setSoTimeout(1000);
         host = address.getHostAddress() + ":" + listener.getLocalPort();
         expiresAt = durationMs < 0 ? Long.MAX_VALUE

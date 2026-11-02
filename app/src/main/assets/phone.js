@@ -1,7 +1,8 @@
 'use strict';
 const byId = id => document.getElementById(id);
 const urlInput = byId('url'), preview = byId('preview'), status = byId('status');
-const supplied = location.hash.slice(1);
+const localSession = '__LAN_SESSION_TOKEN__';
+const supplied = /^[A-Za-z0-9_-]{32}$/.test(localSession) ? localSession : location.hash.slice(1);
 let token = /^[A-Za-z0-9_-]{32}$/.test(supplied) ? supplied : '';
 try {
     if (token) sessionStorage.setItem('parentSession', token);
@@ -22,7 +23,7 @@ async function api(path, data) {
         return result;
     } catch (error) {
         if (error instanceof TypeError || error.name === 'AbortError')
-            throw new Error('TV neodpovídá. Zkontroluj stejnou Wi-Fi a otevřený QR kód na TV. Po vypršení přístupu naskenuj nový kód.');
+            throw new Error('TV neodpovídá. Zkontroluj domácí síť a spuštěnou aplikaci v TV. Potom obnov tuto stránku.');
         throw error;
     } finally { clearTimeout(timeout); }
 }
@@ -56,7 +57,7 @@ byId('add').addEventListener('click', async () => {
     message('Ukládám do TV…');
     try {
         await api('/api/add', {id: selectedId, title: byId('title').value.trim(), profile});
-        message('✓ Video je povolené ' + names[profile] + '.\nNa TV zavři QR kód a otevři profil dítěte. Video najdeš v kategorii Vše.', 'success');
+        message('✓ Video je povolené ' + names[profile] + '.\nNa TV otevři znovu profil dítěte. Video najdeš v kategorii Vše.', 'success');
         byId('another').hidden = false;
     } catch (error) {
         message(error.message, 'error'); byId('add').disabled = false;

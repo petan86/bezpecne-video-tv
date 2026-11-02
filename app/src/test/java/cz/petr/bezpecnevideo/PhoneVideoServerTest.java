@@ -15,6 +15,24 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class PhoneVideoServerTest {
+    @Test public void directAccessWorksAtSamePortAfterRestart() throws Exception {
+        List<String> saved = new ArrayList<>();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try (PhoneVideoServer server = new PhoneVideoServer(InetAddress.getByName("127.0.0.1"), "page",
+                    "const localSession = '__LAN_SESSION_TOKEN__';", id -> new JSONObject(),
+                    (profile, id, title) -> { saved.add(id); return true; }, null, -1, 32795, true)) {
+                assertEquals("http://127.0.0.1:32795", server.origin());
+                String host = URI.create(server.origin()).getAuthority();
+                String script = request(server, "GET", "/phone.js", "", "", "", host);
+                java.util.regex.Matcher token = java.util.regex.Pattern.compile("localSession = '([A-Za-z0-9_-]{32})'").matcher(script);
+                assertTrue(token.find());
+                String body = "{\"id\":\"16LuvR2CARA\",\"profile\":\"matysek\"}";
+                assertTrue(request(server, "POST", "/api/add", body, "Bearer " + token.group(1), server.origin(), host).startsWith("HTTP/1.1 200"));
+                assertTrue(request(server, "POST", "/api/add", body, "Bearer " + token.group(1), "https://other.invalid", host).startsWith("HTTP/1.1 403"));
+            }
+        }
+        assertEquals(2, saved.size());
+    }
     private PhoneVideoServer server(List<String> saved) throws Exception {
         return new PhoneVideoServer(InetAddress.getByName("127.0.0.1"), "<html>phone</html>", "// phone UI",
                 id -> new JSONObject().put("title", "Test video"),

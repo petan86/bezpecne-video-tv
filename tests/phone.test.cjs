@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const html = fs.readFileSync('app/src/main/assets/phone.html', 'utf8');
 const script = fs.readFileSync('app/src/main/assets/phone.js', 'utf8');
-function setup(hasToken = true) {
+function setup(hasToken = true, direct = false) {
     const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], {
         value: '', hidden: true, disabled: false, events: {},
         addEventListener(event, fn) { this.events[event] = fn; }, append(...children) { this.children = (this.children || []).concat(children); },
@@ -24,7 +24,7 @@ function setup(hasToken = true) {
                 : path.endsWith('list') ? {matysek: {videos: [], channels: []}, filipek: {videos: [], channels: []}} : {ok: true}};
         }
     });
-    vm.runInContext(script, context);
+    vm.runInContext(direct ? script.replaceAll('__LAN_SESSION_TOKEN__', 'b'.repeat(32)) : script, context);
     return {nodes, requests, fail: () => fail = true};
 }
 (async () => {
@@ -47,6 +47,11 @@ function setup(hasToken = true) {
     assert.equal(t.requests.filter(request => request.path.endsWith('/add')).length, 1, 'reset must not submit previous video');
     const missing = setup(false);
     assert.equal(missing.nodes.get('previewButton').disabled, true);
+    const direct = setup(false, true);
+    direct.nodes.get('url').value = 'https://youtu.be/16LuvR2CARA';
+    await direct.nodes.get('lookup').events.submit({preventDefault() {}});
+    await direct.nodes.get('add').events.click();
+    assert.equal(direct.requests.find(r => r.path.endsWith('/add')).headers.Authorization, 'Bearer ' + 'b'.repeat(32));
     const offline = setup(); offline.fail();
     await offline.nodes.get('lookup').events.submit({preventDefault() {}});
     assert.match(offline.nodes.get('status').textContent, /TV neodpovídá/);

@@ -93,6 +93,14 @@ public final class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback customViewCallback;
     private boolean searchChoiceOpen;
     private PhoneVideoServer phoneServer;
+    private boolean phoneStopped;
+    private final Runnable startLan = new Runnable() {
+        @Override public void run() {
+            if (isDestroyed()) return;
+            try { ensurePhoneServer(); }
+            catch (Exception error) { playbackHandler.postDelayed(this, 5000); }
+        }
+    };
     private boolean phoneScreen;
     private Object phoneRequest;
     private TextView phoneReceived;
@@ -105,6 +113,7 @@ public final class MainActivity extends Activity {
         setContentView(root);
         warmUpYouTube();
         showProfilePicker();
+        playbackHandler.post(startLan);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -692,37 +701,15 @@ public final class MainActivity extends Activity {
         channelExecutor.execute(() -> {
             PhoneVideoServer started = null;
             try {
-                started = phoneServer;
-                if (started == null || !started.isOpen()) {
-                    java.net.InetAddress address = PhonePairing.address(this);
-                    if (address == null) throw new java.io.IOException("LAN unavailable");
-                    started = new PhoneVideoServer(address, readAsset("phone.html"), readAsset("phone.js"),
-                            YouTubePreview::lookup, (profile, id, title) -> {
-                                boolean saved = store.addVideo(profile, id, title);
-                                if (saved) runOnUiThread(() -> {
-                                    if (phoneReceived != null)
-                                        phoneReceived.setText("Povoleno " + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
-                                });
-                                return saved;
-                            }, new PhoneVideoServer.Administration() {
-                                @Override public JSONObject list() { return remoteParentList(); }
-                                @Override public boolean remove(String profile, String type, String id) {
-                                    if ("video".equals(type)) store.removeVideo(profile, id);
-                                    else store.removeChannel(profile, id);
-                                    return true;
-                                }
-                            }, -1);
-                }
-                android.graphics.Bitmap bitmap = PhonePairing.qr(started.link());
+                started = ensurePhoneServer();
+                android.graphics.Bitmap bitmap = PhonePairing.qr(started.origin() + "/");
                 PhoneVideoServer server = started;
                 runOnUiThread(() -> {
-                    if (!phoneScreen || phoneRequest != request || isDestroyed()) { server.close(); return; }
-                    phoneServer = server;
+                    if (!phoneScreen || phoneRequest != request || isDestroyed()) return;
                     qr.setImageBitmap(bitmap);
-                    connection.setText("Na PC otevřete: " + server.link() + "\nOdkaz funguje jen v domácí síti a obsahuje dočasný přístupový klíč.");
+                    connection.setText("Na PC otevřete: " + server.origin() + "/\nStálý port 32795. QR kód ani přístupový klíč nejsou potřeba. Přístup mají zařízení v domácí síti.");
                 });
             } catch (Exception error) {
-                if (started != null) started.close();
                 runOnUiThread(() -> {
                     if (!phoneScreen || phoneRequest != request || isDestroyed()) return;
                     connection.setText("Připojení se nepodařilo připravit. Připoj TV k domácí Wi-Fi nebo kabelem, pak zkus QR kód znovu. Je potřeba místní IPv4 adresa.");
@@ -737,6 +724,31 @@ public final class MainActivity extends Activity {
             while ((line = reader.readLine()) != null) value.append(line).append('\n');
             return value.toString();
         }
+    }
+
+    private synchronized PhoneVideoServer ensurePhoneServer() throws java.io.IOException {
+        if (phoneStopped) throw new java.io.IOException("Activity stopped");
+        java.net.InetAddress address = PhonePairing.address(this);
+        if (address == null) throw new java.io.IOException("LAN unavailable");
+        if (phoneServer != null && phoneServer.isOpen()) return phoneServer;
+        phoneServer = new PhoneVideoServer(address, readAsset("phone.html"), readAsset("phone.js"),
+                YouTubePreview::lookup, (profile, id, title) -> {
+                    boolean saved = store.addVideo(profile, id, title);
+                    if (saved) runOnUiThread(() -> {
+                        if (phoneReceived != null) phoneReceived.setText("Povoleno "
+                                + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
+                    });
+                    return saved;
+                },
+                new PhoneVideoServer.Administration() {
+                    @Override public JSONObject list() { return remoteParentList(); }
+                    @Override public boolean remove(String profile, String type, String id) {
+                        if ("video".equals(type)) store.removeVideo(profile, id);
+                        else store.removeChannel(profile, id);
+                        return true;
+                    }
+                }, -1, 32795, true);
+        return phoneServer;
     }
 
     private JSONObject remoteParentList() {
@@ -754,7 +766,9 @@ public final class MainActivity extends Activity {
         return result;
     }
 
-    private void stopPhoneSession() {
+    private synchronized void stopPhoneSession() {
+        phoneStopped = true;
+        playbackHandler.removeCallbacks(startLan);
         phoneScreen = false;
         phoneRequest = null;
         phoneReceived = null;
