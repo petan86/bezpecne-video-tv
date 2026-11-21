@@ -47,6 +47,7 @@ final class NativeYouTubePlayer extends FrameLayout {
     interface Listener {
         void onProgress(double positionSeconds, double durationSeconds, boolean ended);
         void onError(String detail);
+        void onEnded();
     }
 
     private static boolean extractorReady;
@@ -59,6 +60,8 @@ final class NativeYouTubePlayer extends FrameLayout {
     private final LinearLayout actions;
     private final Listener listener;
     private static final long ACTIONS_HIDE_DELAY_MS = 10_000;
+    /** Highest offered video resolution (lines). */
+    private static final int MAX_HEIGHT = 720;
     private final Runnable hideActions = this::hideActions;
     private ExoPlayer player;
     private List<VideoStream> qualities = new ArrayList<>();
@@ -68,6 +71,8 @@ final class NativeYouTubePlayer extends FrameLayout {
     private int selectedSubtitle = -1;
     private long initialPositionMs;
     private boolean errorReported;
+    private boolean endedReported;
+    private Runnable upNextTick;
 
     NativeYouTubePlayer(Context context, String videoId, double startSeconds, Listener listener) {
         super(context);
@@ -143,7 +148,11 @@ final class NativeYouTubePlayer extends FrameLayout {
                     if (labels.add(key)) unique.add(stream);
                 }
                 if (unique.isEmpty()) throw new IllegalStateException("YouTube neposkytl použitelnou video stopu.");
-                qualities = unique;
+                // Cap resolution at 720p; if YouTube offers nothing that low, keep only the smallest stream.
+                List<VideoStream> capped = new ArrayList<>();
+                for (VideoStream stream : unique) if (height(stream) <= MAX_HEIGHT) capped.add(stream);
+                if (capped.isEmpty()) capped.add(unique.get(unique.size() - 1));
+                qualities = capped;
                 subtitles = new ArrayList<>(info.getSubtitles());
                 subtitles.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
                 selectedQuality = defaultQuality(qualities);
@@ -167,6 +176,7 @@ final class NativeYouTubePlayer extends FrameLayout {
 
     private void playSelection(long positionMs) {
         if (player != null) player.release();
+        endedReported = false;
         HashMap<String, String> headers = new HashMap<>();
         headers.put("Referer", "https://www.youtube.com/");
         headers.put("Origin", "https://www.youtube.com");
@@ -194,7 +204,10 @@ final class NativeYouTubePlayer extends FrameLayout {
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
                 reportError("Media3: " + error.getErrorCodeName() + " – " + safeMessage(error));
             }
-            @Override public void onPlaybackStateChanged(int state) { updateKeepScreenOn(); }
+            @Override public void onPlaybackStateChanged(int state) {
+                updateKeepScreenOn();
+                if (state == Player.STATE_ENDED && !endedReported) { endedReported = true; listener.onEnded(); }
+            }
             @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) { updateKeepScreenOn(); }
         });
         playerView.setPlayer(player); player.setMediaSource(source); player.prepare();
@@ -231,6 +244,31 @@ final class NativeYouTubePlayer extends FrameLayout {
                 player.getPlaybackState() == Player.STATE_ENDED);
     }
     void resumePlayback() { if (player != null) player.play(); }
+
+    /** Shows a countdown over the finished video, then runs {@code next}. Back (closing the player) cancels it. */
+    void showUpNext(String title, Runnable next) {
+        cancelUpNext();
+        setKeepScreenOn(true);
+        final int[] seconds = {5};
+        message.setBackgroundColor(Color.argb(200, 0, 0, 0));
+        message.setVisibility(VISIBLE);
+        upNextTick = new Runnable() {
+            @Override public void run() {
+                if (seconds[0] <= 0) { upNextTick = null; next.run(); return; }
+                message.setText("Další video za " + seconds[0] + " s:\n" + title + "\n\nZpět = ukončit");
+                seconds[0]--;
+                postDelayed(this, 1000);
+            }
+        };
+        upNextTick.run();
+    }
+
+    void cancelUpNext() {
+        if (upNextTick != null) {
+            removeCallbacks(upNextTick); upNextTick = null;
+            message.setVisibility(GONE); updateKeepScreenOn();
+        }
+    }
 
     /** Any remote key shows the Quality/Captions tiles again; they hide after 10 s without input. */
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
@@ -290,11 +328,12 @@ final class NativeYouTubePlayer extends FrameLayout {
         if (player != null) { player.release(); player = null; }
         setKeepScreenOn(false);
         removeCallbacks(hideActions);
+        cancelUpNext();
         loader.shutdownNow();
     }
     private long position() { return player == null ? initialPositionMs : player.getCurrentPosition(); }
     private static int defaultQuality(List<VideoStream> streams) {
-        for (int i = 0; i < streams.size(); i++) if (height(streams.get(i)) <= 1080) return i;
+        for (int i = 0; i < streams.size(); i++) if (height(streams.get(i)) <= MAX_HEIGHT) return i;
         return streams.size() - 1;
     }
     private static int height(VideoStream stream) {

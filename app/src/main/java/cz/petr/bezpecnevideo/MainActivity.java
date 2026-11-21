@@ -463,10 +463,34 @@ public final class MainActivity extends Activity {
                     if (captured.generation == playbackGeneration && nativePlayer != null)
                         showIframeFallback(captured);
                 }
+                @Override public void onEnded() {
+                    if (captured.generation == playbackGeneration && nativePlayer != null) offerNextVideo(captured);
+                }
                 });
         render(nativePlayer);
         playbackHandler.removeCallbacks(progressPoll);
         playbackHandler.postDelayed(progressPoll, 1000);
+    }
+
+    /** After a video ends, count down and continue with the next allowed video from the same gallery. */
+    private void offerNextVideo(PlaybackSession captured) {
+        if (!(retainedLibrary instanceof VideoGallery) || !captured.profile.equals(activeProfile)) return;
+        VideoGallery gallery = (VideoGallery) retainedLibrary;
+        VideoStore.Video next = gallery.nextAfter(captured.video.id);
+        while (next != null && !isVideoAllowed(captured.profile, next)) next = gallery.nextAfter(next.id);
+        if (next == null) return;
+        VideoStore.Video chosen = next;
+        String[] title = chosen.title.split("  •  ", 2);
+        nativePlayer.showUpNext(title[0], () -> {
+            if (captured.generation != playbackGeneration || nativePlayer == null) return;
+            View library = retainedLibrary;
+            playbackHandler.removeCallbacks(progressPoll);
+            nativePlayer.release(); // saves the finished video as watched
+            nativePlayer = null;
+            play(chosen, false);
+            retainedLibrary = library; // return to the gallery, not to the previous player
+            if (library instanceof VideoGallery) ((VideoGallery) library).focusVideo(chosen.id);
+        });
     }
 
     private void showIframeFallback(PlaybackSession captured) {
@@ -556,7 +580,7 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() {
         if (phoneScreen) closePhoneAdd();
         playbackHandler.removeCallbacks(progressPoll);
-        if (nativePlayer != null) nativePlayer.reportProgress(true);
+        if (nativePlayer != null) { nativePlayer.cancelUpNext(); nativePlayer.reportProgress(true); }
         if (webView == retainedPlayer) captureProgress(true);
         requestedVideo = null;
         if (webView != null) webView.onPause();

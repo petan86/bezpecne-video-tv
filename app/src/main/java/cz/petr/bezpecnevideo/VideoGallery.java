@@ -66,6 +66,13 @@ final class VideoGallery extends RecyclerView {
         rebuild();
     }
 
+    /** The video that follows {@code id} in the main gallery list, or null if it is the last / not listed. */
+    VideoStore.Video nextAfter(String id) {
+        for (int i = 0; i < videos.size() - 1; i++)
+            if (videos.get(i).video.id.equals(id)) return videos.get(i + 1).video;
+        return null;
+    }
+
     void focusVideo(String id) {
         focusKey = "video:" + id;
         for (int i = 0; i < rows.size(); i++) if (focusKey.equals(rows.get(i).key)) {
