@@ -59,7 +59,7 @@ final class NativeYouTubePlayer extends FrameLayout {
     private final Button captionsButton;
     private final LinearLayout actions;
     private final Listener listener;
-    private static final long ACTIONS_HIDE_DELAY_MS = 10_000;
+    private static final long ACTIONS_HIDE_DELAY_MS = 3_000;
     /** Highest offered video resolution (lines). */
     private static final int MAX_HEIGHT = 720;
     private final Runnable hideActions = this::hideActions;

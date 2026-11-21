@@ -69,15 +69,31 @@ byId('another').addEventListener('click', () => {
     selectedId = null; preview.hidden = true; urlInput.value = ''; message(''); urlInput.focus();
 });
 function itemRow(profile, type, item) {
-    const row = document.createElement('div'); row.className = 'item';
-    const label = document.createElement('span'); label.textContent = item.title || item.id;
-    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Odebrat';
+    const tile = document.createElement('div'); tile.className = 'tile';
+    const name = item.title || item.id;
+    let thumb;
+    if (type === 'video' && /^[A-Za-z0-9_-]{11}$/.test(item.id)) {
+        thumb = document.createElement('img');
+        thumb.src = 'https://i.ytimg.com/vi/' + item.id + '/mqdefault.jpg';
+        thumb.alt = ''; thumb.loading = 'lazy'; thumb.referrerPolicy = 'no-referrer';
+    } else {
+        thumb = document.createElement('div'); thumb.className = 'thumb'; thumb.textContent = '📺';
+    }
+    tile.append(thumb);
+    if (type === 'channel') {
+        const kind = document.createElement('span'); kind.className = 'kind'; kind.textContent = 'Kanál';
+        tile.append(kind);
+    }
+    const label = document.createElement('div'); label.className = 'name'; label.textContent = name; label.title = name;
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove';
+    remove.textContent = '×'; remove.setAttribute('aria-label', 'Odebrat: ' + name); remove.title = 'Odebrat';
     remove.addEventListener('click', async () => {
-        remove.disabled = true;
+        if (!confirm('Odebrat „' + name + '“?')) return;
+        remove.disabled = true; tile.classList.add('busy');
         try { await api('/api/remove', {profile, type, id: item.id}); await loadManaged(); }
-        catch (error) { message(error.message, 'error'); remove.disabled = false; }
+        catch (error) { message(error.message, 'error'); remove.disabled = false; tile.classList.remove('busy'); }
     });
-    row.append(label, remove); return row;
+    tile.append(label, remove); return tile;
 }
 async function loadManaged() {
     if (!token) return;
