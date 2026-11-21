@@ -16,29 +16,43 @@ import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.VideoSize;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.dash.manifest.DashManifest;
+import androidx.media3.exoplayer.dash.manifest.DashManifestParser;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.MergingMediaSource;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
 import androidx.media3.ui.PlayerView;
 
 import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.localization.ContentCountry;
 import org.schabi.newpipe.extractor.localization.Localization;
+import org.schabi.newpipe.extractor.services.youtube.ItagItem;
 import org.schabi.newpipe.extractor.stream.AudioStream;
+import org.schabi.newpipe.extractor.stream.DeliveryMethod;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.SubtitlesStream;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -62,7 +76,21 @@ final class NativeYouTubePlayer extends FrameLayout {
     private static final long ACTIONS_HIDE_DELAY_MS = 3_000;
     /** Highest offered video resolution (lines). */
     private static final int MAX_HEIGHT = 720;
+    /**
+     * Adaptive playback starts from this bandwidth guess (bits/s), so the first seconds load a low
+     * quality quickly; the player steps up to 720p once enough buffer is downloaded.
+     */
+    private static final long START_BITRATE_ESTIMATE = 1_000_000;
+    /** Buffer (ms) that must be loaded before switching to a higher quality. */
+    private static final int MIN_BUFFER_FOR_QUALITY_INCREASE_MS = 6_000;
     private final Runnable hideActions = this::hideActions;
+    /** Video-only streams of one codec, ascending by height, played as one adaptive DASH set. */
+    private List<VideoStream> ladder = new ArrayList<>();
+    private long durationMs;
+    private boolean adaptiveActive;
+    /** 0 = automatic quality, otherwise the fixed height chosen by the user (adaptive mode). */
+    private int fixedHeight;
+    private int currentHeight;
     private ExoPlayer player;
     private List<VideoStream> qualities = new ArrayList<>();
     private List<AudioStream> audios = new ArrayList<>();
@@ -156,6 +184,8 @@ final class NativeYouTubePlayer extends FrameLayout {
                 subtitles = new ArrayList<>(info.getSubtitles());
                 subtitles.removeIf(stream -> !stream.isUrl() || stream.getContent().isEmpty());
                 selectedQuality = defaultQuality(qualities);
+                durationMs = info.getDuration() > 0 ? info.getDuration() * 1000 : 0;
+                ladder = audios.isEmpty() || durationMs <= 0 ? new ArrayList<>() : adaptiveLadder(info.getVideoOnlyStreams());
                 post(() -> {
                     loading.setVisibility(GONE); message.setVisibility(GONE);
                     qualityButton.setEnabled(true); captionsButton.setEnabled(!subtitles.isEmpty());
@@ -185,23 +215,61 @@ final class NativeYouTubePlayer extends FrameLayout {
                 .setAllowCrossProtocolRedirects(true).setDefaultRequestProperties(headers);
         DefaultDataSource.Factory data = new DefaultDataSource.Factory(getContext(), http);
         DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(data);
-        VideoStream video = qualities.get(selectedQuality);
-        MediaItem.Builder videoItem = new MediaItem.Builder().setUri(video.getContent());
+        List<MediaItem.SubtitleConfiguration> subtitleConfig = new ArrayList<>();
         if (selectedSubtitle >= 0 && selectedSubtitle < subtitles.size()) {
             SubtitlesStream subtitle = subtitles.get(selectedSubtitle);
-            videoItem.setSubtitleConfigurations(java.util.Collections.singletonList(
-                    new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.getContent()))
-                            .setMimeType(subtitleMime(subtitle)).setLanguage(subtitle.getLanguageTag())
-                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()));
+            subtitleConfig.add(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.getContent()))
+                    .setMimeType(subtitleMime(subtitle)).setLanguage(subtitle.getLanguageTag())
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build());
         }
-        MediaSource source = factory.createMediaSource(videoItem.build());
-        if (video.isVideoOnly() && !audios.isEmpty()) {
-            MediaSource audio = factory.createMediaSource(MediaItem.fromUri(audios.get(0).getContent()));
-            source = new MergingMediaSource(source, audio);
+        MediaSource source = null;
+        adaptiveActive = false;
+        if (ladder.size() >= 2) {
+            try {
+                // One DASH adaptation set with every quality: the player switches between them at
+                // segment boundaries, without restarting or a visible stall.
+                byte[] mpd = dashManifest(ladder, durationMs).getBytes(StandardCharsets.UTF_8);
+                DashManifest manifest = new DashManifestParser()
+                        .parse(Uri.parse("https://www.youtube.com/"), new ByteArrayInputStream(mpd));
+                MediaSource video = new DashMediaSource.Factory(data).createMediaSource(manifest,
+                        new MediaItem.Builder().setUri(Uri.EMPTY).setMimeType(MimeTypes.APPLICATION_MPD).build());
+                // Subtitles ride along with the audio item; DefaultMediaSourceFactory side-loads them.
+                MediaSource audio = factory.createMediaSource(new MediaItem.Builder()
+                        .setUri(audios.get(0).getContent()).setSubtitleConfigurations(subtitleConfig).build());
+                source = new MergingMediaSource(video, audio);
+                adaptiveActive = true;
+            } catch (Exception adaptiveFailed) {
+                ladder = new ArrayList<>();
+            }
         }
-        player = new ExoPlayer.Builder(getContext()).build();
+        VideoStream video = qualities.get(selectedQuality);
+        if (source == null) {
+            source = factory.createMediaSource(new MediaItem.Builder().setUri(video.getContent())
+                    .setSubtitleConfigurations(subtitleConfig).build());
+            if (video.isVideoOnly() && !audios.isEmpty()) {
+                MediaSource audio = factory.createMediaSource(MediaItem.fromUri(audios.get(0).getContent()));
+                source = new MergingMediaSource(source, audio);
+            }
+        }
+        DefaultBandwidthMeter meter = new DefaultBandwidthMeter.Builder(getContext())
+                .setInitialBitrateEstimate(START_BITRATE_ESTIMATE).build();
+        DefaultTrackSelector selector = new DefaultTrackSelector(getContext(), new AdaptiveTrackSelection.Factory(
+                MIN_BUFFER_FOR_QUALITY_INCREASE_MS,
+                AdaptiveTrackSelection.DEFAULT_MAX_DURATION_FOR_QUALITY_DECREASE_MS,
+                AdaptiveTrackSelection.DEFAULT_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS,
+                AdaptiveTrackSelection.DEFAULT_BANDWIDTH_FRACTION));
+        player = new ExoPlayer.Builder(getContext()).setBandwidthMeter(meter).setTrackSelector(selector).build();
+        if (adaptiveActive) applyQualityConstraint();
+        currentHeight = 0;
         player.addListener(new Player.Listener() {
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                if (adaptiveActive) {
+                    // Adaptive stream rejected (e.g. codec): retry once with the single-file stream.
+                    long position = position();
+                    ladder = new ArrayList<>();
+                    post(() -> playSelection(position));
+                    return;
+                }
                 reportError("Media3: " + error.getErrorCodeName() + " – " + safeMessage(error));
             }
             @Override public void onPlaybackStateChanged(int state) {
@@ -209,22 +277,122 @@ final class NativeYouTubePlayer extends FrameLayout {
                 if (state == Player.STATE_ENDED && !endedReported) { endedReported = true; listener.onEnded(); }
             }
             @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) { updateKeepScreenOn(); }
+            @Override public void onVideoSizeChanged(VideoSize size) {
+                if (size.height > 0) { currentHeight = size.height; updateQualityLabel(); }
+            }
         });
         playerView.setPlayer(player); player.setMediaSource(source); player.prepare();
         player.seekTo(positionMs); player.setPlayWhenReady(true);
-        qualityButton.setText("Kvalita: " + qualityLabel(video));
+        updateQualityLabel();
         captionsButton.setText(selectedSubtitle < 0 ? "Titulky: vypnuto"
                 : "Titulky: " + subtitles.get(selectedSubtitle).getDisplayLanguageName());
         showActions();
     }
 
+    private void updateQualityLabel() {
+        if (!adaptiveActive) { qualityButton.setText("Kvalita: " + qualityLabel(qualities.get(selectedQuality))); return; }
+        String now = currentHeight > 0 ? currentHeight + "p" : "…";
+        qualityButton.setText(fixedHeight == 0 ? "Kvalita: auto (" + now + ")" : "Kvalita: " + fixedHeight + "p");
+    }
+
+    /** Automatic: the whole ladder up to 720p. Fixed: only the chosen height. Applied without restarting. */
+    private void applyQualityConstraint() {
+        TrackSelectionParameters.Builder params = player.getTrackSelectionParameters().buildUpon()
+                .clearVideoSizeConstraints();
+        if (fixedHeight > 0) params.setMaxVideoSize(Integer.MAX_VALUE, fixedHeight).setMinVideoSize(0, fixedHeight);
+        else params.setMaxVideoSize(Integer.MAX_VALUE, MAX_HEIGHT);
+        player.setTrackSelectionParameters(params.build());
+    }
+
     private void chooseQuality() {
+        if (adaptiveActive) { chooseAdaptiveQuality(); return; }
         String[] labels = new String[qualities.size()];
         for (int i = 0; i < labels.length; i++) labels[i] = qualityLabel(qualities.get(i));
         new AlertDialog.Builder(getContext()).setTitle("Kvalita videa")
                 .setSingleChoiceItems(labels, selectedQuality, (dialog, which) -> {
                     long position = position(); selectedQuality = which; playSelection(position); dialog.dismiss();
                 }).setNegativeButton("Zrušit", null).show();
+    }
+
+    private void chooseAdaptiveQuality() {
+        List<Integer> heights = new ArrayList<>();
+        for (int i = ladder.size() - 1; i >= 0; i--) heights.add(height(ladder.get(i)));
+        String[] labels = new String[heights.size() + 1];
+        labels[0] = "Automaticky (začne nižší, pak až 720p)";
+        int checked = 0;
+        for (int i = 0; i < heights.size(); i++) {
+            labels[i + 1] = heights.get(i) + "p";
+            if (heights.get(i) == fixedHeight) checked = i + 1;
+        }
+        new AlertDialog.Builder(getContext()).setTitle("Kvalita videa")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    fixedHeight = which == 0 ? 0 : heights.get(which - 1);
+                    if (player != null) applyQualityConstraint();
+                    updateQualityLabel(); dialog.dismiss();
+                }).setNegativeButton("Zrušit", null).show();
+    }
+
+    /**
+     * Picks video-only progressive streams (≤720p) of one codec that carry byte ranges for their
+     * init and index boxes, which is what a DASH on-demand representation needs. Prefers H.264,
+     * which every TV decodes in hardware. Returns fewer than two streams when adaptive is not possible.
+     */
+    static List<VideoStream> adaptiveLadder(List<VideoStream> streams) {
+        Map<String, Map<Integer, VideoStream>> byCodec = new HashMap<>();
+        for (VideoStream stream : streams) {
+            if (!stream.isVideoOnly() || !stream.isUrl() || stream.getContent().isEmpty()) continue;
+            if (stream.getDeliveryMethod() != DeliveryMethod.PROGRESSIVE_HTTP || stream.getFormat() == null) continue;
+            ItagItem itag = stream.getItagItem();
+            String codec = stream.getCodec();
+            int h = height(stream);
+            if (itag == null || codec == null || codec.isEmpty() || h <= 0 || h > MAX_HEIGHT) continue;
+            if (stream.getInitStart() < 0 || stream.getInitEnd() <= stream.getInitStart()
+                    || stream.getIndexStart() <= stream.getInitEnd() || stream.getIndexEnd() <= stream.getIndexStart()) continue;
+            if (bandwidth(stream) <= 0) continue;
+            String family = stream.getFormat().getMimeType() + "|" + codec.split("\\.")[0].toLowerCase(Locale.ROOT);
+            Map<Integer, VideoStream> perHeight = byCodec.computeIfAbsent(family, k -> new TreeMap<>());
+            VideoStream existing = perHeight.get(h);
+            if (existing == null || stream.getFps() > existing.getFps()) perHeight.put(h, stream);
+        }
+        for (String preferred : new String[]{"avc1", "vp09", "vp9", "av01"}) {
+            for (Map.Entry<String, Map<Integer, VideoStream>> entry : byCodec.entrySet()) {
+                if (entry.getKey().endsWith("|" + preferred) && entry.getValue().size() >= 2)
+                    return new ArrayList<>(entry.getValue().values());
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    static String dashManifest(List<VideoStream> ladder, long durationMs) {
+        StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+                .append("<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\" minBufferTime=\"PT1.5S\"")
+                .append(" profiles=\"urn:mpeg:dash:profile:isoff-on-demand:2011\" mediaPresentationDuration=\"PT")
+                .append(String.format(Locale.US, "%.3f", durationMs / 1000d)).append("S\"><Period>")
+                .append("<AdaptationSet contentType=\"video\" subsegmentAlignment=\"true\" mimeType=\"")
+                .append(xmlEscape(ladder.get(0).getFormat().getMimeType())).append("\">");
+        for (VideoStream stream : ladder) {
+            xml.append("<Representation id=\"").append(stream.getItag()).append("\" codecs=\"")
+                    .append(xmlEscape(stream.getCodec())).append("\" bandwidth=\"").append(bandwidth(stream))
+                    .append("\" height=\"").append(height(stream)).append('"');
+            if (stream.getWidth() > 0) xml.append(" width=\"").append(stream.getWidth()).append('"');
+            if (stream.getFps() > 0) xml.append(" frameRate=\"").append(stream.getFps()).append('"');
+            xml.append("><BaseURL>").append(xmlEscape(stream.getContent())).append("</BaseURL>")
+                    .append("<SegmentBase indexRange=\"").append(stream.getIndexStart()).append('-').append(stream.getIndexEnd())
+                    .append("\"><Initialization range=\"").append(stream.getInitStart()).append('-').append(stream.getInitEnd())
+                    .append("\"/></SegmentBase></Representation>");
+        }
+        return xml.append("</AdaptationSet></Period></MPD>").toString();
+    }
+
+    private static int bandwidth(VideoStream stream) {
+        if (stream.getBitrate() > 0) return stream.getBitrate();
+        ItagItem itag = stream.getItagItem();
+        return itag == null ? 0 : itag.getAverageBitrate();
+    }
+
+    private static String xmlEscape(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     private void chooseCaptions() {

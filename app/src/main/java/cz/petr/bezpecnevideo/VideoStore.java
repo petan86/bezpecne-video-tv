@@ -17,6 +17,7 @@ import java.util.List;
 final class VideoStore {
     static final String MATYSEK = "matysek";
     static final String FILIPEK = "filipek";
+    static final String HUDBA = "hudba";
     private static final String DEFAULT_PIN = "2468";
     private static final String BLOCKED_BEAST_BUILDERS_CZ = "UC5YN3TtZQJ8HMMT3PuJydnA";
     private final SharedPreferences prefs;
@@ -57,7 +58,7 @@ final class VideoStore {
     }
 
     synchronized boolean addVideo(String profile, String url, String title) {
-        if (!MATYSEK.equals(profile) && !FILIPEK.equals(profile)) return false;
+        if (!MATYSEK.equals(profile) && !FILIPEK.equals(profile) && !HUDBA.equals(profile)) return false;
         String id = extractVideoId(url);
         if (id == null) return false;
         List<Video> current = videos(profile);

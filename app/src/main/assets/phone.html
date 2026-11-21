@@ -15,7 +15,7 @@ input{border:1px solid #555963;background:#1c1f26;color:white}input:focus{outlin
 button{background:#e62117;color:white;border:0;font-weight:650;margin-top:14px;cursor:pointer}
 button:disabled{opacity:.55;cursor:wait}.secondary{background:#30343e}
 fieldset{border:0;padding:0;margin:20px 0}legend{font-weight:600;margin-bottom:10px}
-.profiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.profiles label{margin:0}
+.profiles{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.profiles label{margin:0}
 .profiles input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
 .profiles span{display:block;text-align:center;padding:15px 4px;border:2px solid #454a56;border-radius:12px;font-size:15px}
 .profiles input:checked+span{border-color:#ff5959;background:#442021}.profiles input:focus-visible+span{outline:3px solid white}
@@ -68,6 +68,7 @@ background:rgba(0,0,0,.75);font-size:20px;line-height:34px;font-weight:700;color
 <fieldset id="recipients"><legend>Komu video povolit?</legend><div class="profiles">
 <label><input type="radio" name="profile" value="matysek" checked><span>🦊 Matýskovi</span></label>
 <label><input type="radio" name="profile" value="filipek"><span>🐸 Filípkovi</span></label>
+<label><input type="radio" name="profile" value="hudba"><span>🎵 Hudba</span></label>
 <label><input type="radio" name="profile" value="both"><span>Oběma</span></label>
 </div></fieldset>
 <button id="add" type="button">Povolit video</button>

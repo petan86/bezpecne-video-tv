@@ -10,8 +10,8 @@ android {
         applicationId = "cz.petr.bezpecnevideo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 34
-        versionName = "0.2.8"
+        versionCode = 35
+        versionName = "0.2.9"
     }
 
     buildTypes {
@@ -32,6 +32,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     testImplementation("junit:junit:4.13.2")

@@ -136,20 +136,20 @@ public final class MainActivity extends Activity {
     private void showProfilePicker() {
         currentGallery = null;
         activeProfile = null;
-        // Only the two child tiles. Parent settings are managed from a PC; the TV parent area stays
-        // reachable by holding OK on either tile (still protected by the PIN).
+        // Profile tiles only. Parent settings are managed from a PC; the TV parent area stays
+        // reachable by holding OK on any tile (still protected by the PIN).
         LinearLayout tiles = new LinearLayout(this);
         tiles.setOrientation(LinearLayout.HORIZONTAL);
         tiles.setGravity(Gravity.CENTER);
         tiles.setBackgroundColor(DARK);
         Button matysek = profileButton("🦊", "Matýsek", Color.rgb(54, 123, 245), VideoStore.MATYSEK);
         Button filipek = profileButton("🐸", "Filípek", Color.rgb(34, 160, 107), VideoStore.FILIPEK);
-        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(dp(300), dp(260));
-        first.setMargins(dp(24), 0, dp(24), 0);
-        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(dp(300), dp(260));
-        second.setMargins(dp(24), 0, dp(24), 0);
-        tiles.addView(matysek, first);
-        tiles.addView(filipek, second);
+        Button hudba = profileButton("🎵", "Hudba", Color.rgb(142, 68, 210), VideoStore.HUDBA);
+        for (Button tile : new Button[]{matysek, filipek, hudba}) {
+            LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(250), dp(230));
+            size.setMargins(dp(18), 0, dp(18), 0);
+            tiles.addView(tile, size);
+        }
         render(tiles);
         matysek.requestFocus();
         onProfilePicker = true;
@@ -659,16 +659,18 @@ public final class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button addMatysek = button("Přidat Matýskovi", Color.rgb(54, 123, 245));
         Button addFilipek = button("Přidat Filípkovi", Color.rgb(34, 160, 107));
+        Button addHudba = button("Přidat do Hudby", Color.rgb(142, 68, 210));
         View.OnClickListener add = v -> {
-            String profile = v == addMatysek ? VideoStore.MATYSEK : VideoStore.FILIPEK;
+            String profile = v == addMatysek ? VideoStore.MATYSEK : v == addFilipek ? VideoStore.FILIPEK : VideoStore.HUDBA;
             if (store.addVideo(profile, url.getText().toString(), videoTitle.getText().toString())) {
                 Toast.makeText(this, "Video bylo povoleno", Toast.LENGTH_SHORT).show();
                 showParentArea();
             } else Toast.makeText(this, "Tento YouTube odkaz není platný", Toast.LENGTH_LONG).show();
         };
-        addMatysek.setOnClickListener(add); addFilipek.setOnClickListener(add);
+        addMatysek.setOnClickListener(add); addFilipek.setOnClickListener(add); addHudba.setOnClickListener(add);
         actions.addView(addMatysek, new LinearLayout.LayoutParams(0, dp(58), 1));
         actions.addView(addFilipek, new LinearLayout.LayoutParams(0, dp(58), 1));
+        actions.addView(addHudba, new LinearLayout.LayoutParams(0, dp(58), 1));
         content.addView(actions, wide());
         content.addView(space(28));
         Button archive = button("Celý archiv kanálů – nastavit API klíč", NAVY);
@@ -689,6 +691,7 @@ public final class MainActivity extends Activity {
         content.addView(title("Povolený obsah", 24));
         addManagementList(content, VideoStore.MATYSEK, "Matýsek");
         addManagementList(content, VideoStore.FILIPEK, "Filípek");
+        addManagementList(content, VideoStore.HUDBA, "Hudba");
         content.addView(space(18));
         Button pin = button("Změnit rodičovský PIN", NAVY);
         pin.setOnClickListener(v -> changePin());
@@ -774,7 +777,7 @@ public final class MainActivity extends Activity {
                     boolean saved = store.addVideo(profile, id, title);
                     if (saved) runOnUiThread(() -> {
                         if (phoneReceived != null) phoneReceived.setText("Povoleno "
-                                + (VideoStore.MATYSEK.equals(profile) ? "Matýskovi: " : "Filípkovi: ") + title);
+                                + profileDative(profile) + ": " + title);
                     });
                     return saved;
                 },
@@ -807,7 +810,7 @@ public final class MainActivity extends Activity {
     private JSONObject remoteParentList() {
         JSONObject result = new JSONObject();
         try {
-            for (String profile : new String[]{VideoStore.MATYSEK, VideoStore.FILIPEK}) {
+            for (String profile : new String[]{VideoStore.MATYSEK, VideoStore.FILIPEK, VideoStore.HUDBA}) {
                 JSONArray videos = new JSONArray(), channels = new JSONArray();
                 for (VideoStore.Video video : store.videos(profile))
                     videos.put(new JSONObject().put("id", video.id).put("title", video.title));
@@ -937,11 +940,9 @@ public final class MainActivity extends Activity {
     private void approveSearchResult(String videoId, String title) {
         String safeTitle = title == null || title.isEmpty() ? "Povolené video" : title;
         new AlertDialog.Builder(this)
-                .setTitle("Komu povolit video?")
-                .setMessage(safeTitle)
-                .setPositiveButton("Matýskovi", (dialog, which) -> saveSearchResult(VideoStore.MATYSEK, videoId, safeTitle))
-                .setNegativeButton("Filípkovi", (dialog, which) -> saveSearchResult(VideoStore.FILIPEK, videoId, safeTitle))
-                .setNeutralButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
+                .setTitle("Komu povolit video? – " + safeTitle)
+                .setItems(PROFILE_CHOICES, (dialog, which) -> saveSearchResult(PROFILE_IDS[which], videoId, safeTitle))
+                .setNegativeButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
                 .setOnCancelListener(dialog -> searchChoiceOpen = false)
                 .show();
     }
@@ -988,11 +989,9 @@ public final class MainActivity extends Activity {
 
     private void approveChannel(String channelId, String title) {
         new AlertDialog.Builder(this)
-                .setTitle("Komu povolit celý kanál?")
-                .setMessage(title + "\n\nPovolena budou i nová videa přidaná v budoucnu.")
-                .setPositiveButton("Matýskovi", (dialog, which) -> saveChannel(VideoStore.MATYSEK, channelId, title))
-                .setNegativeButton("Filípkovi", (dialog, which) -> saveChannel(VideoStore.FILIPEK, channelId, title))
-                .setNeutralButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
+                .setTitle("Komu povolit celý kanál „" + title + "“? (i budoucí videa)")
+                .setItems(PROFILE_CHOICES, (dialog, which) -> saveChannel(PROFILE_IDS[which], channelId, title))
+                .setNegativeButton("Zrušit", (dialog, which) -> searchChoiceOpen = false)
                 .setOnCancelListener(dialog -> searchChoiceOpen = false)
                 .show();
     }
@@ -1140,5 +1139,16 @@ public final class MainActivity extends Activity {
     private View space(int height) { View v = new View(this); v.setLayoutParams(new LinearLayout.LayoutParams(1, dp(height))); return v; }
     private LinearLayout.LayoutParams wide() { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, dp(5), 0, dp(5)); return p; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private String profileName() { return VideoStore.MATYSEK.equals(activeProfile) ? "Matýsek" : "Filípek"; }
+    private static final String[] PROFILE_CHOICES = {"🦊  Matýskovi", "🐸  Filípkovi", "🎵  Do Hudby"};
+    private static final String[] PROFILE_IDS = {VideoStore.MATYSEK, VideoStore.FILIPEK, VideoStore.HUDBA};
+    private String profileName() {
+        if (VideoStore.MATYSEK.equals(activeProfile)) return "Matýsek";
+        if (VideoStore.FILIPEK.equals(activeProfile)) return "Filípek";
+        return "Hudba";
+    }
+    private static String profileDative(String profile) {
+        if (VideoStore.MATYSEK.equals(profile)) return "Matýskovi";
+        if (VideoStore.FILIPEK.equals(profile)) return "Filípkovi";
+        return "do Hudby";
+    }
 }

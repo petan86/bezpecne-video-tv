@@ -121,7 +121,7 @@ final class PhoneVideoServer implements AutoCloseable {
                 } else if ("/api/remove".equals(request.path)) {
                     if (administration == null) { respond(client, 404, "application/json", error("Správa není dostupná.")); return; }
                     String profile = data.optString("profile"), type = data.optString("type"), id = data.optString("id");
-                    boolean validProfile = "matysek".equals(profile) || "filipek".equals(profile);
+                    boolean validProfile = "matysek".equals(profile) || "filipek".equals(profile) || "hudba".equals(profile);
                     boolean validId = ("video".equals(type) && id.matches("[A-Za-z0-9_-]{11}"))
                             || ("channel".equals(type) && id.matches("UC[A-Za-z0-9_-]{22}"));
                     if (!validProfile || !validId) { respond(client, 400, "application/json", error("Neplatná položka.")); return; }
@@ -139,7 +139,7 @@ final class PhoneVideoServer implements AutoCloseable {
                 } else if ("/api/add".equals(request.path)) {
                     String id = data.optString("id"), title = data.optString("title").trim(), profile = data.optString("profile");
                     if (!id.matches("[A-Za-z0-9_-]{11}") || title.length() > 180
-                            || !("matysek".equals(profile) || "filipek".equals(profile) || "both".equals(profile))) {
+                            || !("matysek".equals(profile) || "filipek".equals(profile) || "hudba".equals(profile) || "both".equals(profile))) {
                         respond(client, 400, "application/json", error("Zkontrolujte video, název a vybraný profil.")); return;
                     }
                     if (title.isEmpty()) title = "YouTube video " + id;

@@ -51,7 +51,7 @@ urlInput.addEventListener('input', () => { selectedId = null; preview.hidden = t
 byId('add').addEventListener('click', async () => {
     if (!selectedId) return;
     const profile = document.querySelector('input[name=profile]:checked').value;
-    const names = {matysek: 'Matýskovi', filipek: 'Filípkovi', both: 'Matýskovi i Filípkovi'};
+    const names = {matysek: 'Matýskovi', filipek: 'Filípkovi', hudba: 'v Hudbě', both: 'Matýskovi i Filípkovi'};
     byId('add').disabled = true; byId('previewButton').disabled = true; urlInput.disabled = true;
     byId('title').disabled = true; byId('recipients').disabled = true;
     message('Ukládám do TV…');
@@ -129,7 +129,7 @@ async function loadManaged() {
     const root = byId('managed'); byId('refresh').disabled = true;
     try {
         const data = await api('/api/list', {}); root.textContent = '';
-        for (const [profile, name] of [['matysek', 'Matýsek'], ['filipek', 'Filípek']]) {
+        for (const [profile, name] of [['matysek', 'Matýsek'], ['filipek', 'Filípek'], ['hudba', 'Hudba']]) {
             const heading = document.createElement('h3'); heading.textContent = name; root.append(heading);
             const channels = data[profile]?.channels || [], videos = data[profile]?.videos || [];
             root.append(subheading('Povolené kanály (' + channels.length + ')'));
