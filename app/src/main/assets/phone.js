@@ -84,7 +84,8 @@ function itemRow(profile, type, item) {
         const kind = document.createElement('span'); kind.className = 'kind'; kind.textContent = 'Kanál';
         tile.append(kind);
     }
-    const label = document.createElement('div'); label.className = 'name'; label.textContent = name; label.title = name;
+    const label = document.createElement('div'); label.className = 'name'; label.title = name;
+    const text = document.createElement('span'); text.textContent = name; label.append(text);
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove';
     remove.textContent = '×'; remove.setAttribute('aria-label', 'Odebrat: ' + name); remove.title = 'Odebrat';
     remove.addEventListener('click', async () => {
@@ -95,6 +96,34 @@ function itemRow(profile, type, item) {
     });
     tile.append(label, remove); return tile;
 }
+function subheading(text) { const h = document.createElement('h4'); h.textContent = text; return h; }
+function emptyNote(text) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = text; return p; }
+function channelCard(profile, item) {
+    const card = document.createElement('div'); card.className = 'channel';
+    const name = item.title || item.id;
+    const icon = document.createElement('span'); icon.className = 'icon'; icon.textContent = '📺';
+    const info = document.createElement('div'); info.className = 'info';
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = name; title.title = name;
+    info.append(title);
+    if (/^UC[A-Za-z0-9_-]{22}$/.test(item.id)) {
+        const link = document.createElement('a'); link.href = 'https://www.youtube.com/channel/' + item.id;
+        link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Otevřít na YouTube';
+        info.append(link);
+    }
+    card.append(icon, info);
+    {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove';
+        remove.textContent = '×'; remove.setAttribute('aria-label', 'Odebrat kanál: ' + name); remove.title = 'Odebrat kanál';
+        remove.addEventListener('click', async () => {
+            if (!confirm('Odebrat kanál „' + name + '“? Videa z tohoto kanálu se přestanou dětem nabízet.')) return;
+            remove.disabled = true; card.classList.add('busy');
+            try { await api('/api/remove', {profile, type: 'channel', id: item.id}); await loadManaged(); }
+            catch (error) { message(error.message, 'error'); remove.disabled = false; card.classList.remove('busy'); }
+        });
+        card.append(remove);
+    }
+    return card;
+}
 async function loadManaged() {
     if (!token) return;
     const root = byId('managed'); byId('refresh').disabled = true;
@@ -102,11 +131,16 @@ async function loadManaged() {
         const data = await api('/api/list', {}); root.textContent = '';
         for (const [profile, name] of [['matysek', 'Matýsek'], ['filipek', 'Filípek']]) {
             const heading = document.createElement('h3'); heading.textContent = name; root.append(heading);
+            const channels = data[profile]?.channels || [], videos = data[profile]?.videos || [];
+            root.append(subheading('Povolené kanály (' + channels.length + ')'));
+            const channelList = document.createElement('div'); channelList.className = 'channel-list';
+            if (!channels.length) channelList.append(emptyNote('Žádné povolené kanály.'));
+            for (const item of channels) channelList.append(channelCard(profile, item));
+            root.append(channelList);
+            root.append(subheading('Povolená videa (' + videos.length + ')'));
             const list = document.createElement('div'); list.className = 'profile-list';
-            const entries = [...(data[profile]?.videos || []).map(x => ['video', x]),
-                ...(data[profile]?.channels || []).map(x => ['channel', x])];
-            if (!entries.length) { const empty = document.createElement('p'); empty.textContent = 'Žádné ručně přidané položky.'; list.append(empty); }
-            for (const [type, item] of entries) list.append(itemRow(profile, type, item));
+            if (!videos.length) list.append(emptyNote('Žádná ručně povolená videa.'));
+            for (const item of videos) list.append(itemRow(profile, 'video', item));
             root.append(list);
         }
     } catch (error) { message(error.message, 'error'); }

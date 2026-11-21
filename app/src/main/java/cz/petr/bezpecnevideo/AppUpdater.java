@@ -30,6 +30,10 @@ final class AppUpdater {
     private long downloadId = -1;
     private BroadcastReceiver receiver;
     private volatile boolean installerOpened;
+    private static final String PREFS = "app_updater";
+    private static final long CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000;
+    private static final long SNOOZE_MS = 24L * 60 * 60 * 1000;
+    private boolean quietCheckRunning;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
@@ -45,6 +49,45 @@ final class AppUpdater {
                 activity.runOnUiThread(() -> Toast.makeText(activity,
                         "Aktualizaci se nepodařilo ověřit. Zkontrolujte internet.", Toast.LENGTH_LONG).show());
             }
+        });
+    }
+
+    /**
+     * Background check used on the start screen: at most once per CHECK_INTERVAL_MS, silent when
+     * offline or up to date, and offers the update only when a newer release exists. "Teď ne"
+     * postpones the same version for SNOOZE_MS. The dialog is shown only if {@code stillAllowed}
+     * still holds when the answer arrives (e.g. the user has not started a video meanwhile).
+     */
+    void checkQuietly(java.util.function.BooleanSupplier stillAllowed) {
+        android.content.SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        if (quietCheckRunning || now - prefs.getLong("lastCheck", 0) < CHECK_INTERVAL_MS) return;
+        quietCheckRunning = true;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Release release = null;
+            try { release = loadLatestRelease(); } catch (Exception ignored) { }
+            Release found = release;
+            activity.runOnUiThread(() -> {
+                quietCheckRunning = false;
+                if (found == null) return; // offline: try again next time the start screen appears
+                prefs.edit().putLong("lastCheck", System.currentTimeMillis()).apply();
+                String latest = found.tag.replaceFirst("^v", "");
+                if (compareVersions(latest, currentVersion()) <= 0) return;
+                if (latest.equals(prefs.getString("snoozedVersion", ""))
+                        && System.currentTimeMillis() < prefs.getLong("snoozedUntil", 0)) return;
+                if (activity.isFinishing() || activity.isDestroyed() || !stillAllowed.getAsBoolean()) {
+                    prefs.edit().putLong("lastCheck", 0).apply(); // offer it on the next start screen
+                    return;
+                }
+                new AlertDialog.Builder(activity)
+                        .setTitle("Je dostupná nová verze " + latest)
+                        .setMessage("Používáte verzi " + currentVersion() + ". Chcete aktualizaci stáhnout a nainstalovat?")
+                        .setPositiveButton("Aktualizovat", (dialog, which) -> prepareDownload(found))
+                        .setNegativeButton("Teď ne", (dialog, which) -> prefs.edit()
+                                .putString("snoozedVersion", latest)
+                                .putLong("snoozedUntil", System.currentTimeMillis() + SNOOZE_MS).apply())
+                        .show();
+            });
         });
     }
 
@@ -92,9 +135,11 @@ final class AppUpdater {
 
     private void prepareDownload(Release release) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) {
+            // Re-offer the update as soon as the user comes back from the settings screen.
+            activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong("lastCheck", 0).apply();
             new AlertDialog.Builder(activity)
                     .setTitle("Povolit aktualizace")
-                    .setMessage("Google TV nyní otevře nastavení. Povolte instalaci aplikací pro Bezpečné video a potom stiskněte tlačítko aktualizace znovu.")
+                    .setMessage("Google TV nyní otevře nastavení. Povolte instalaci aplikací pro Bezpečné video a potom se vraťte zpět – aktualizace se nabídne znovu.")
                     .setPositiveButton("Otevřít nastavení", (dialog, which) -> {
                         Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                                 Uri.parse("package:" + activity.getPackageName()));

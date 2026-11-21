@@ -82,6 +82,18 @@ final class VideoStore {
         saveChannels(profile, current);
     }
 
+    /** Built-in (code-defined) channels the parent has removed for this profile. */
+    boolean isBuiltInRemoved(String profile, String channelId) {
+        return prefs.getStringSet("removed_builtin_" + profile, java.util.Collections.emptySet()).contains(channelId);
+    }
+
+    void removeBuiltIn(String profile, String channelId) {
+        java.util.Set<String> removed = new java.util.HashSet<>(
+                prefs.getStringSet("removed_builtin_" + profile, java.util.Collections.emptySet()));
+        removed.add(channelId);
+        prefs.edit().putStringSet("removed_builtin_" + profile, removed).apply();
+    }
+
     void removeChannel(String profile, String channelId) {
         List<Channel> current = channels(profile);
         current.removeIf(channel -> channel.id.equals(channelId));

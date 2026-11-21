@@ -102,6 +102,8 @@ public final class MainActivity extends Activity {
         }
     };
     private boolean phoneScreen;
+    private boolean onProfilePicker;
+    private final AppUpdater updater = new AppUpdater(this);
     private Object phoneRequest;
     private TextView phoneReceived;
 
@@ -134,25 +136,32 @@ public final class MainActivity extends Activity {
     private void showProfilePicker() {
         currentGallery = null;
         activeProfile = null;
-        LinearLayout page = page();
-        page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.addView(title("Kdo se bude dívat?", 30));
-        page.addView(space(28));
-        page.addView(profileButton("🦊", "Matýsek", Color.rgb(54, 123, 245), VideoStore.MATYSEK));
-        page.addView(space(18));
-        page.addView(profileButton("🐸", "Filípek", Color.rgb(34, 160, 107), VideoStore.FILIPEK));
-        page.addView(space(40));
-        Button parent = button("⚙  Rodičovská správa", NAVY);
-        parent.setOnClickListener(v -> requestPin(this::showParentArea));
-        page.addView(parent, wide());
-        render(page);
+        // Only the two child tiles. Parent settings are managed from a PC; the TV parent area stays
+        // reachable by holding OK on either tile (still protected by the PIN).
+        LinearLayout tiles = new LinearLayout(this);
+        tiles.setOrientation(LinearLayout.HORIZONTAL);
+        tiles.setGravity(Gravity.CENTER);
+        tiles.setBackgroundColor(DARK);
+        Button matysek = profileButton("🦊", "Matýsek", Color.rgb(54, 123, 245), VideoStore.MATYSEK);
+        Button filipek = profileButton("🐸", "Filípek", Color.rgb(34, 160, 107), VideoStore.FILIPEK);
+        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(dp(300), dp(260));
+        first.setMargins(dp(24), 0, dp(24), 0);
+        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(dp(300), dp(260));
+        second.setMargins(dp(24), 0, dp(24), 0);
+        tiles.addView(matysek, first);
+        tiles.addView(filipek, second);
+        render(tiles);
+        matysek.requestFocus();
+        onProfilePicker = true;
+        updater.checkQuietly(() -> onProfilePicker && !isFinishing());
     }
 
     private Button profileButton(String emoji, String name, int color, String profile) {
-        Button button = button(emoji + "   " + name, color);
-        button.setTextSize(23);
-        button.setMinHeight(dp(84));
+        Button button = button(emoji + "\n" + name, color);
+        button.setTextSize(34);
+        button.setLineSpacing(dp(6), 1f);
         button.setOnClickListener(v -> { activeProfile = profile; activeChannelFilter = null; showLibrary(); });
+        button.setOnLongClickListener(v -> { requestPin(this::showParentArea); return true; });
         button.setContentDescription("Otevřít profil " + name);
         button.setAllCaps(false);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -165,7 +174,7 @@ public final class MainActivity extends Activity {
 
     private void showLibrary() {
         List<VideoStore.Video> videos = activeChannelFilter == null ? store.videos(activeProfile) : new ArrayList<>();
-        if (VideoStore.MATYSEK.equals(activeProfile)
+        if (builtIn(activeProfile, CRUNCHLABS_CHANNEL)
                 && (activeChannelFilter == null || CRUNCHLABS_CHANNEL.equals(activeChannelFilter))) {
             boolean alreadyAdded = false;
             for (VideoStore.Video video : videos) {
@@ -194,23 +203,23 @@ public final class MainActivity extends Activity {
         Set<String> displayed = new HashSet<>();
         for (VideoStore.Video video : videos) displayed.add(video.id);
         int channelCount = 0;
-        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(SLIVKI_CHANNEL)) {
+        if (builtIn(activeProfile, SLIVKI_CHANNEL) && isChannelVisible(SLIVKI_CHANNEL)) {
             channelCount++;
             loadChannelFeed(SLIVKI_CHANNEL, "Toto je Slivki", 0, content, grid, loading, displayed);
         }
-        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(CRUNCHLABS_CHANNEL)) {
+        if (builtIn(activeProfile, CRUNCHLABS_CHANNEL) && isChannelVisible(CRUNCHLABS_CHANNEL)) {
             channelCount++;
             loadChannelFeed(CRUNCHLABS_CHANNEL, "CrunchLabs – český dabing", 0, content, grid, loading, displayed);
         }
-        if (VideoStore.MATYSEK.equals(activeProfile) && isChannelVisible(EVERY_BRICK_CHANNEL)) {
+        if (builtIn(activeProfile, EVERY_BRICK_CHANNEL) && isChannelVisible(EVERY_BRICK_CHANNEL)) {
             channelCount++;
             loadChannelFeed(EVERY_BRICK_CHANNEL, "Every Brick", 1, content, grid, loading, displayed);
         }
-        if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(PAW_PATROL_CZECH_CHANNEL)) {
+        if (builtIn(activeProfile, PAW_PATROL_CZECH_CHANNEL) && isChannelVisible(PAW_PATROL_CZECH_CHANNEL)) {
             channelCount++;
             loadChannelFeed(PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky", 0, content, grid, loading, displayed);
         }
-        if (VideoStore.FILIPEK.equals(activeProfile) && isChannelVisible(KIDIBLI_CHANNEL)) {
+        if (builtIn(activeProfile, KIDIBLI_CHANNEL) && isChannelVisible(KIDIBLI_CHANNEL)) {
             channelCount++;
             loadChannelFeed(KIDIBLI_CHANNEL, "Kidibli", 0, content, grid, loading, displayed);
         }
@@ -231,6 +240,13 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** True when channelId is a code-defined channel of this profile that the parent has not removed. */
+    private boolean builtIn(String profile, String channelId) {
+        for (String[] channel : builtInChannels(profile))
+            if (channel[0].equals(channelId)) return !store.isBuiltInRemoved(profile, channelId);
+        return false;
+    }
+
     private boolean isChannelVisible(String channelId) {
         return activeChannelFilter == null || activeChannelFilter.equals(channelId);
     }
@@ -239,9 +255,7 @@ public final class MainActivity extends Activity {
         if (profile == null) return false;
         for (VideoStore.Video approved : store.videos(profile)) if (approved.id.equals(video.id)) return true;
         String channel = video.channelId;
-        if (VideoStore.MATYSEK.equals(profile) && (SLIVKI_CHANNEL.equals(channel)
-                || CRUNCHLABS_CHANNEL.equals(channel) || EVERY_BRICK_CHANNEL.equals(channel))) return true;
-        if (VideoStore.FILIPEK.equals(profile) && (PAW_PATROL_CZECH_CHANNEL.equals(channel) || KIDIBLI_CHANNEL.equals(channel))) return true;
+        if (channel != null && builtIn(profile, channel)) return true;
         for (VideoStore.Channel approved : store.channels(profile)) if (approved.id.equals(channel)) return true;
         return false;
     }
@@ -291,15 +305,12 @@ public final class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         TextView all = categoryChip("Vše", activeChannelFilter == null, null);
         row.addView(all);
-        if (VideoStore.MATYSEK.equals(activeProfile)) {
-            row.addView(categoryChip("Toto je Slivki", SLIVKI_CHANNEL.equals(activeChannelFilter), SLIVKI_CHANNEL));
-            row.addView(categoryChip("CrunchLabs", CRUNCHLABS_CHANNEL.equals(activeChannelFilter), CRUNCHLABS_CHANNEL));
-            row.addView(categoryChip("Every Brick", EVERY_BRICK_CHANNEL.equals(activeChannelFilter), EVERY_BRICK_CHANNEL));
-        }
-        if (VideoStore.FILIPEK.equals(activeProfile)) {
-            row.addView(categoryChip("Tlapková patrola – česky", PAW_PATROL_CZECH_CHANNEL.equals(activeChannelFilter), PAW_PATROL_CZECH_CHANNEL));
-            row.addView(categoryChip("Kidibli", KIDIBLI_CHANNEL.equals(activeChannelFilter), KIDIBLI_CHANNEL));
-        }
+        String[][] chips = {{SLIVKI_CHANNEL, "Toto je Slivki"}, {CRUNCHLABS_CHANNEL, "CrunchLabs"},
+                {EVERY_BRICK_CHANNEL, "Every Brick"}, {PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky"},
+                {KIDIBLI_CHANNEL, "Kidibli"}};
+        for (String[] chip : chips)
+            if (builtIn(activeProfile, chip[0]))
+                row.addView(categoryChip(chip[1], chip[0].equals(activeChannelFilter), chip[0]));
         for (VideoStore.Channel channel : store.channels(activeProfile))
             row.addView(categoryChip(channel.title, channel.id.equals(activeChannelFilter), channel.id));
         return row;
@@ -595,6 +606,7 @@ public final class MainActivity extends Activity {
             playbackHandler.postDelayed(progressPoll, 1000);
         }
         if (webView != null) webView.onResume();
+        if (onProfilePicker) updater.checkQuietly(() -> onProfilePicker && !isFinishing());
         if (webView == retainedPlayer && playbackSession != null) {
             retainedPlayer.evaluateJavascript("if(window.resumeTracking)resumeTracking();", null);
             playbackHandler.removeCallbacks(progressPoll);
@@ -770,11 +782,26 @@ public final class MainActivity extends Activity {
                     @Override public JSONObject list() { return remoteParentList(); }
                     @Override public boolean remove(String profile, String type, String id) {
                         if ("video".equals(type)) store.removeVideo(profile, id);
-                        else store.removeChannel(profile, id);
+                        else {
+                            if (builtIn(profile, id)) store.removeBuiltIn(profile, id);
+                            store.removeChannel(profile, id);
+                        }
                         return true;
                     }
                 }, -1, 32795, true);
         return phoneServer;
+    }
+
+    /** Channels allowed directly in code (not removable from the parent page). Keep in sync with showLibrary(). */
+    private static String[][] builtInChannels(String profile) {
+        if (VideoStore.MATYSEK.equals(profile)) return new String[][]{
+                {SLIVKI_CHANNEL, "Toto je Slivki"},
+                {CRUNCHLABS_CHANNEL, "CrunchLabs – český dabing"},
+                {EVERY_BRICK_CHANNEL, "Every Brick"}};
+        if (VideoStore.FILIPEK.equals(profile)) return new String[][]{
+                {PAW_PATROL_CZECH_CHANNEL, "Tlapková patrola – česky"},
+                {KIDIBLI_CHANNEL, "Kidibli"}};
+        return new String[0][];
     }
 
     private JSONObject remoteParentList() {
@@ -784,6 +811,8 @@ public final class MainActivity extends Activity {
                 JSONArray videos = new JSONArray(), channels = new JSONArray();
                 for (VideoStore.Video video : store.videos(profile))
                     videos.put(new JSONObject().put("id", video.id).put("title", video.title));
+                for (String[] builtIn : builtInChannels(profile))
+                    if (!store.isBuiltInRemoved(profile, builtIn[0])) channels.put(new JSONObject().put("id", builtIn[0]).put("title", builtIn[1]).put("builtin", true));
                 for (VideoStore.Channel channel : store.channels(profile))
                     channels.put(new JSONObject().put("id", channel.id).put("title", channel.title));
                 result.put(profile, new JSONObject().put("videos", videos).put("channels", channels));
@@ -1102,7 +1131,7 @@ public final class MainActivity extends Activity {
 
     private LinearLayout page() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setPadding(dp(20), dp(24), dp(20), dp(28)); v.setBackgroundColor(DARK); return v; }
     private ScrollView scroll(View view) { ScrollView s = new ScrollView(this); s.setFillViewport(true); s.addView(view); return s; }
-    private void render(View view) { root.removeAllViews(); root.addView(view, new FrameLayout.LayoutParams(-1, -1)); }
+    private void render(View view) { onProfilePicker = false; root.removeAllViews(); root.addView(view, new FrameLayout.LayoutParams(-1, -1)); }
     private View header(String label, String action, View.OnClickListener listener) { LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); TextView name = title(label, 21); Button b = button(action, NAVY); b.setOnClickListener(listener); row.addView(name, new LinearLayout.LayoutParams(0, dp(64), 1)); row.addView(b, new LinearLayout.LayoutParams(dp(105), dp(48))); return row; }
     private TextView title(String value, int size) { TextView t = text(value, size, Color.WHITE); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t; }
     private TextView text(String value, int size, int color) { TextView t = new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color); t.setPadding(0, dp(5), 0, dp(5)); return t; }
