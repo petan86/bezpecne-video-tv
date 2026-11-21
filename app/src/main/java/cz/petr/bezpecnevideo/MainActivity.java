@@ -490,6 +490,8 @@ public final class MainActivity extends Activity {
         webView.onResume(); syncPlayer();
         LinearLayout shell = new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK); shell.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        // Keep the TV awake while the fallback player is shown (screensaver would stop it after ~5 min).
+        shell.setKeepScreenOn(true);
         render(shell); playbackHandler.postDelayed(progressPoll, 1000);
         Toast.makeText(this, "Nativní stream nebyl dostupný, používám záložní přehrávač.", Toast.LENGTH_LONG).show();
     }

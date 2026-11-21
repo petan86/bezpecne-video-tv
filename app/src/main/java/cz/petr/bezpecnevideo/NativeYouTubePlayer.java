@@ -56,7 +56,10 @@ final class NativeYouTubePlayer extends FrameLayout {
     private final TextView message;
     private final Button qualityButton;
     private final Button captionsButton;
+    private final LinearLayout actions;
     private final Listener listener;
+    private static final long ACTIONS_HIDE_DELAY_MS = 10_000;
+    private final Runnable hideActions = this::hideActions;
     private ExoPlayer player;
     private List<VideoStream> qualities = new ArrayList<>();
     private List<AudioStream> audios = new ArrayList<>();
@@ -75,6 +78,9 @@ final class NativeYouTubePlayer extends FrameLayout {
         playerView.setControllerAutoShow(true);
         playerView.setControllerHideOnTouch(false);
         addView(playerView, new LayoutParams(-1, -1));
+        // Prevent the TV screensaver / ambient mode from interrupting playback after ~5 min
+        // without remote input. Updated from player state once playback starts.
+        setKeepScreenOn(true);
 
         loading = new ProgressBar(context);
         LayoutParams spinner = new LayoutParams(dp(64), dp(64), Gravity.CENTER);
@@ -84,7 +90,7 @@ final class NativeYouTubePlayer extends FrameLayout {
         message.setPadding(dp(24), dp(18), dp(24), dp(18));
         addView(message, new LayoutParams(-1, -2, Gravity.CENTER));
 
-        LinearLayout actions = new LinearLayout(context);
+        actions = new LinearLayout(context);
         actions.setOrientation(LinearLayout.HORIZONTAL); actions.setGravity(Gravity.CENTER);
         actions.setPadding(dp(16), dp(10), dp(16), dp(18));
         qualityButton = controlButton("Kvalita: načítám…");
@@ -188,12 +194,15 @@ final class NativeYouTubePlayer extends FrameLayout {
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
                 reportError("Media3: " + error.getErrorCodeName() + " – " + safeMessage(error));
             }
+            @Override public void onPlaybackStateChanged(int state) { updateKeepScreenOn(); }
+            @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) { updateKeepScreenOn(); }
         });
         playerView.setPlayer(player); player.setMediaSource(source); player.prepare();
         player.seekTo(positionMs); player.setPlayWhenReady(true);
         qualityButton.setText("Kvalita: " + qualityLabel(video));
         captionsButton.setText(selectedSubtitle < 0 ? "Titulky: vypnuto"
                 : "Titulky: " + subtitles.get(selectedSubtitle).getDisplayLanguageName());
+        showActions();
     }
 
     private void chooseQuality() {
@@ -222,6 +231,53 @@ final class NativeYouTubePlayer extends FrameLayout {
                 player.getPlaybackState() == Player.STATE_ENDED);
     }
     void resumePlayback() { if (player != null) player.play(); }
+
+    /** Any remote key shows the Quality/Captions tiles again; they hide after 10 s without input. */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        int code = event.getKeyCode();
+        boolean navigation = code == android.view.KeyEvent.KEYCODE_DPAD_UP || code == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                || code == android.view.KeyEvent.KEYCODE_DPAD_LEFT || code == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                || code == android.view.KeyEvent.KEYCODE_DPAD_CENTER || code == android.view.KeyEvent.KEYCODE_ENTER;
+        if (actions.getVisibility() != VISIBLE && player != null && navigation) {
+            // First press only reveals the tiles, so it does not accidentally trigger an action.
+            if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+                showActions();
+                qualityButton.requestFocus();
+            }
+            return true;
+        }
+        scheduleHideActions();
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void showActions() {
+        actions.animate().cancel();
+        actions.setAlpha(1f);
+        actions.setVisibility(VISIBLE);
+        scheduleHideActions();
+    }
+
+    private void scheduleHideActions() {
+        removeCallbacks(hideActions);
+        postDelayed(hideActions, ACTIONS_HIDE_DELAY_MS);
+    }
+
+    private void hideActions() {
+        if (player == null) return; // keep visible until playback starts
+        actions.animate().alpha(0f).setDuration(300).withEndAction(() -> {
+            actions.setVisibility(GONE);
+            playerView.hideController();
+            playerView.requestFocus();
+        }).start();
+    }
+
+    /** Keep the display awake while a video is playing or buffering; allow the screensaver when paused or finished. */
+    private void updateKeepScreenOn() {
+        if (player == null) { setKeepScreenOn(false); return; }
+        int state = player.getPlaybackState();
+        setKeepScreenOn(player.getPlayWhenReady()
+                && state != Player.STATE_ENDED && state != Player.STATE_IDLE);
+    }
     private void reportError(String detail) {
         if (errorReported) return;
         errorReported = true; loading.setVisibility(GONE);
@@ -229,7 +285,13 @@ final class NativeYouTubePlayer extends FrameLayout {
         listener.onError(detail);
     }
 
-    void release() { reportProgress(true); if (player != null) { player.release(); player = null; } loader.shutdownNow(); }
+    void release() {
+        reportProgress(true);
+        if (player != null) { player.release(); player = null; }
+        setKeepScreenOn(false);
+        removeCallbacks(hideActions);
+        loader.shutdownNow();
+    }
     private long position() { return player == null ? initialPositionMs : player.getCurrentPosition(); }
     private static int defaultQuality(List<VideoStream> streams) {
         for (int i = 0; i < streams.size(); i++) if (height(streams.get(i)) <= 1080) return i;
