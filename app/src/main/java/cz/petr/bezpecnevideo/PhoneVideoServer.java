@@ -30,6 +30,11 @@ final class PhoneVideoServer implements AutoCloseable {
         JSONObject list() throws Exception;
         boolean remove(String profile, String type, String id);
     }
+    /** Resolves a channel link (/channel/UC…, /@handle…) to its id and name. */
+    interface ChannelLookup { VideoStore.Channel find(String link) throws Exception; }
+    interface ChannelSave { boolean add(String profile, String channelId, String title); }
+    private volatile ChannelLookup channelLookup;
+    private volatile ChannelSave channelSave;
     private final ServerSocket listener;
     private final String html, script, token, host;
     private final Lookup lookup;
@@ -72,6 +77,11 @@ final class PhoneVideoServer implements AutoCloseable {
         Thread thread = new Thread(this::accept, "phone-session");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Enables allowing whole channels from the browser. */
+    PhoneVideoServer channels(ChannelLookup lookup, ChannelSave save) {
+        channelLookup = lookup; channelSave = save; return this;
     }
 
     String origin() { return "http://" + host; }
@@ -129,8 +139,21 @@ final class PhoneVideoServer implements AutoCloseable {
                     respond(client, removed ? 200 : 500, "application/json",
                             removed ? new JSONObject().put("ok", true).toString() : error("Odebrání se nepodařilo."));
                 } else if ("/api/preview".equals(request.path)) {
-                    String id = VideoStore.extractVideoId(data.optString("url"));
-                    if (id == null) { respond(client, 400, "application/json", error("Vložte odkaz na konkrétní YouTube video.")); return; }
+                    String link = data.optString("url");
+                    String id = VideoStore.extractVideoId(link);
+                    ChannelLookup channels = channelLookup;
+                    if (id == null && channels != null && ChannelIdentity.channelUrl(link) != null) {
+                        VideoStore.Channel channel;
+                        try { channel = channels.find(link); }
+                        catch (Exception failed) { respond(client, 400, "application/json", error("Kanál se nepodařilo načíst. Zkontrolujte odkaz a zkuste to znovu.")); return; }
+                        JSONObject result = new JSONObject().put("type", "channel").put("id", channel.id)
+                                .put("title", channel.title == null ? "" : channel.title);
+                        if (channel.title == null || channel.title.isEmpty())
+                            result.put("warning", "Název kanálu se nepodařilo načíst. Můžete ho doplnit ručně.");
+                        respond(client, 200, "application/json", result.toString()); return;
+                    }
+                    if (id == null) { respond(client, 400, "application/json", error(channels != null
+                            ? "Vložte odkaz na YouTube video nebo kanál." : "Vložte odkaz na konkrétní YouTube video.")); return; }
                     JSONObject result;
                     try { result = lookup.find(id); }
                     catch (Exception ignored) { result = new JSONObject().put("title", "").put("warning", "Název se nepodařilo načíst. Můžete ho doplnit ručně."); }
@@ -138,19 +161,24 @@ final class PhoneVideoServer implements AutoCloseable {
                     respond(client, 200, "application/json", result.toString());
                 } else if ("/api/add".equals(request.path)) {
                     String id = data.optString("id"), title = data.optString("title").trim(), profile = data.optString("profile");
-                    if (!id.matches("[A-Za-z0-9_-]{11}") || title.length() > 180
+                    boolean channel = "channel".equals(data.optString("type", "video"));
+                    ChannelSave channels = channelSave;
+                    boolean validId = channel ? channels != null && id.matches("UC[A-Za-z0-9_-]{22}") : id.matches("[A-Za-z0-9_-]{11}");
+                    if (!validId || title.length() > 180
                             || !("matysek".equals(profile) || "filipek".equals(profile) || "hudba".equals(profile) || "both".equals(profile))) {
-                        respond(client, 400, "application/json", error("Zkontrolujte video, název a vybraný profil.")); return;
+                        respond(client, 400, "application/json", error(channel ? "Zkontrolujte kanál, název a vybraný profil."
+                                : "Zkontrolujte video, název a vybraný profil.")); return;
                     }
-                    if (title.isEmpty()) title = "YouTube video " + id;
+                    if (title.isEmpty()) title = channel ? "Povolený kanál" : "YouTube video " + id;
                     boolean success;
                     synchronized (lifecycle) {
                         if (!isOpen()) { respond(client, 410, "application/json", error("Přístup skončil. Otevřete nový QR kód na TV.")); return; }
-                        if ("both".equals(profile)) {
-                            boolean first = save.add("matysek", id, title);
-                            boolean second = save.add("filipek", id, title);
-                            success = first && second;
-                        } else success = save.add(profile, id, title);
+                        String[] targets = "both".equals(profile) ? new String[]{"matysek", "filipek"} : new String[]{profile};
+                        success = true;
+                        for (String target : targets) {
+                            boolean saved = channel ? channels.add(target, id, title) : save.add(target, id, title);
+                            success = success && saved;
+                        }
                     }
                     respond(client, success ? 200 : 500, "application/json", success
                             ? new JSONObject().put("ok", true).toString() : error("Uložení se nepodařilo. Zkuste to znovu."));

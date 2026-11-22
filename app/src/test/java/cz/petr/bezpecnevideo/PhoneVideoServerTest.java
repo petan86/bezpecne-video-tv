@@ -76,6 +76,32 @@ public class PhoneVideoServerTest {
             assertEquals(Collections.singletonList("filipek:16LuvR2CARA:Český název"), saved);
         }
     }
+    @Test public void channelLinkPreviewsAndAddsWholeChannel() throws Exception {
+        List<String> saved = Collections.synchronizedList(new ArrayList<>());
+        List<String> channels = Collections.synchronizedList(new ArrayList<>());
+        try (PhoneVideoServer server = server(saved).channels(
+                link -> new VideoStore.Channel("UCzkzjvNIraULEHRBseee5cQ", "Testovací kanál"),
+                (profile, id, title) -> { channels.add(profile + ":" + id + ":" + title); return true; })) {
+            String preview = post(server, "/api/preview", "{\"url\":\"https://www.youtube.com/channel/UCzkzjvNIraULEHRBseee5cQ\"}");
+            assertTrue(preview.startsWith("HTTP/1.1 200"));
+            assertTrue(preview.contains("\"type\":\"channel\"")); assertTrue(preview.contains("Testovací kanál"));
+            assertTrue(post(server, "/api/add", "{\"id\":\"UCzkzjvNIraULEHRBseee5cQ\",\"type\":\"channel\",\"profile\":\"hudba\",\"title\":\"Kanál\"}")
+                    .startsWith("HTTP/1.1 200"));
+            assertTrue(post(server, "/api/add", "{\"id\":\"UCzkzjvNIraULEHRBseee5cQ\",\"type\":\"channel\",\"profile\":\"both\",\"title\":\"\"}")
+                    .startsWith("HTTP/1.1 200"));
+            assertTrue(post(server, "/api/add", "{\"id\":\"16LuvR2CARA\",\"type\":\"channel\",\"profile\":\"hudba\"}").startsWith("HTTP/1.1 400"));
+            assertEquals(java.util.Arrays.asList("hudba:UCzkzjvNIraULEHRBseee5cQ:Kanál",
+                    "matysek:UCzkzjvNIraULEHRBseee5cQ:Povolený kanál", "filipek:UCzkzjvNIraULEHRBseee5cQ:Povolený kanál"), channels);
+            assertTrue(saved.isEmpty());
+        }
+    }
+    @Test public void channelsAreRejectedWhenNotEnabled() throws Exception {
+        try (PhoneVideoServer server = server(new ArrayList<>())) {
+            assertTrue(post(server, "/api/preview", "{\"url\":\"https://www.youtube.com/@Kanal\"}").startsWith("HTTP/1.1 400"));
+            assertTrue(post(server, "/api/add", "{\"id\":\"UCzkzjvNIraULEHRBseee5cQ\",\"type\":\"channel\",\"profile\":\"hudba\"}")
+                    .startsWith("HTTP/1.1 400"));
+        }
+    }
     @Test public void bothProfilesRequireExplicitSelection() throws Exception {
         List<String> saved = Collections.synchronizedList(new ArrayList<>());
         try (PhoneVideoServer server = server(saved)) {

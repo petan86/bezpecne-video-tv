@@ -9,7 +9,7 @@ try {
     else token = sessionStorage.getItem('parentSession') || '';
 } catch (_) { }
 history.replaceState(null, '', '/');
-let selectedId = null;
+let selectedId = null, selectedType = 'video';
 function message(text, kind = '') { status.textContent = text; status.className = kind; }
 async function api(path, data) {
     const abort = new AbortController();
@@ -32,17 +32,24 @@ byId('lookup').addEventListener('submit', async event => {
     if (!token) return;
     preview.hidden = true; selectedId = null;
     byId('previewButton').disabled = true; urlInput.disabled = true;
-    message('Načítám video…');
+    message('Načítám…');
     try {
         const data = await api('/api/preview', {url: urlInput.value.trim()});
         selectedId = data.id;
-        byId('thumbnail').src = 'https://i.ytimg.com/vi/' + selectedId + '/mqdefault.jpg';
+        selectedType = data.type === 'channel' ? 'channel' : 'video';
+        const channel = selectedType === 'channel';
+        byId('thumbnail').hidden = channel;
+        if (!channel) byId('thumbnail').src = 'https://i.ytimg.com/vi/' + selectedId + '/mqdefault.jpg';
         byId('title').value = data.title || '';
         byId('title').disabled = false; byId('recipients').disabled = false;
-        byId('author').textContent = data.author || '';
+        byId('author').textContent = channel ? '📺 Celý kanál – povolí se i všechna jeho budoucí videa.' : (data.author || '');
+        byId('titleLabel').textContent = channel ? 'Název kanálu' : 'Název videa';
+        byId('recipientsLegend').textContent = channel ? 'Komu kanál povolit?' : 'Komu video povolit?';
+        byId('add').textContent = channel ? 'Povolit celý kanál' : 'Povolit video';
         byId('add').disabled = false; byId('another').hidden = true;
         preview.hidden = false;
-        message(data.warning || 'Zkontroluj video a vyber, komu ho chceš povolit.');
+        message(data.warning || (channel ? 'Zkontroluj kanál a vyber, komu ho chceš povolit.'
+            : 'Zkontroluj video a vyber, komu ho chceš povolit.'));
         preview.scrollIntoView({behavior: 'smooth', block: 'start'});
     } catch (error) { message(error.message, 'error'); }
     finally { byId('previewButton').disabled = false; urlInput.disabled = false; }
@@ -56,9 +63,12 @@ byId('add').addEventListener('click', async () => {
     byId('title').disabled = true; byId('recipients').disabled = true;
     message('Ukládám do TV…');
     try {
-        await api('/api/add', {id: selectedId, title: byId('title').value.trim(), profile});
-        message('✓ Video je povolené ' + names[profile] + '.\nNa TV otevři znovu profil dítěte. Video najdeš v kategorii Vše.', 'success');
+        await api('/api/add', {id: selectedId, type: selectedType, title: byId('title').value.trim(), profile});
+        message(selectedType === 'channel'
+            ? '✓ Celý kanál je povolený ' + names[profile] + '.\nNa TV otevři znovu profil – videa z kanálu se načtou mezi ostatními.'
+            : '✓ Video je povolené ' + names[profile] + '.\nNa TV otevři znovu profil dítěte. Video najdeš v kategorii Vše.', 'success');
         byId('another').hidden = false;
+        loadManaged();
     } catch (error) {
         message(error.message, 'error'); byId('add').disabled = false;
         byId('title').disabled = false; byId('recipients').disabled = false;

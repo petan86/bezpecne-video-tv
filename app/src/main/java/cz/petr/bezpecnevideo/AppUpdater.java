@@ -34,6 +34,8 @@ final class AppUpdater {
     private static final long CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000;
     private static final long SNOOZE_MS = 24L * 60 * 60 * 1000;
     private boolean quietCheckRunning;
+    /** Per process: reset whenever the app is started again. */
+    private static boolean checkedSinceLaunch;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
@@ -61,7 +63,8 @@ final class AppUpdater {
     void checkQuietly(java.util.function.BooleanSupplier stillAllowed) {
         android.content.SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         long now = System.currentTimeMillis();
-        if (quietCheckRunning || now - prefs.getLong("lastCheck", 0) < CHECK_INTERVAL_MS) return;
+        // The first start screen after the app is launched always checks; afterwards at most every 6 h.
+        if (quietCheckRunning || (checkedSinceLaunch && now - prefs.getLong("lastCheck", 0) < CHECK_INTERVAL_MS)) return;
         quietCheckRunning = true;
         Executors.newSingleThreadExecutor().execute(() -> {
             Release release = null;
@@ -70,6 +73,7 @@ final class AppUpdater {
             activity.runOnUiThread(() -> {
                 quietCheckRunning = false;
                 if (found == null) return; // offline: try again next time the start screen appears
+                checkedSinceLaunch = true;
                 prefs.edit().putLong("lastCheck", System.currentTimeMillis()).apply();
                 String latest = found.tag.replaceFirst("^v", "");
                 if (compareVersions(latest, currentVersion()) <= 0) return;

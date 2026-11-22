@@ -74,13 +74,19 @@ final class VideoStore {
         save(profile, current);
     }
 
-    void addChannel(String profile, String channelId, String title) {
-        if (channelId == null || !channelId.matches("UC[A-Za-z0-9_-]{22}")) return;
-        if (BLOCKED_BEAST_BUILDERS_CZ.equals(channelId)) return;
+    synchronized boolean addChannel(String profile, String channelId, String title) {
+        if (!MATYSEK.equals(profile) && !FILIPEK.equals(profile) && !HUDBA.equals(profile)) return false;
+        if (channelId == null || !channelId.matches("UC[A-Za-z0-9_-]{22}")) return false;
+        if (BLOCKED_BEAST_BUILDERS_CZ.equals(channelId)) return false;
+        // Allowing a built-in channel again undoes its earlier removal.
+        java.util.Set<String> removed = new java.util.HashSet<>(
+                prefs.getStringSet("removed_builtin_" + profile, java.util.Collections.emptySet()));
+        if (removed.remove(channelId)) prefs.edit().putStringSet("removed_builtin_" + profile, removed).apply();
         List<Channel> current = channels(profile);
-        for (Channel channel : current) if (channel.id.equals(channelId)) return;
+        for (Channel channel : current) if (channel.id.equals(channelId)) return true;
         current.add(new Channel(channelId, title == null || title.trim().isEmpty() ? "Povolený kanál" : title.trim()));
         saveChannels(profile, current);
+        return true;
     }
 
     /** Built-in (code-defined) channels the parent has removed for this profile. */

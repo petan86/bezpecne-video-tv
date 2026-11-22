@@ -54,25 +54,25 @@ background:rgba(0,0,0,.75);font-size:20px;line-height:34px;font-weight:700;color
 </head>
 <body><main>
 <div class="brand">▶ BEZPEČNÉ VIDEO</div>
-<h1>Přidat video dětem</h1>
-<p>Na YouTube zvol <strong>Sdílet → Kopírovat odkaz</strong> a vlož ho sem. Tuto stránku můžeš nechat otevřenou při hledání dalších videí.</p>
+<h1>Přidat video nebo kanál dětem</h1>
+<p>Na YouTube zvol <strong>Sdílet → Kopírovat odkaz</strong> a vlož ho sem. Funguje i odkaz na celý kanál (např. youtube.com/@nazev nebo youtube.com/channel/UC…). Tuto stránku můžeš nechat otevřenou při hledání dalších videí.</p>
 <form id="lookup">
-<label for="url">Odkaz na video</label>
+<label for="url">Odkaz na video nebo kanál</label>
 <input id="url" name="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="2048" placeholder="https://youtu.be/…" required>
-<button id="previewButton" type="submit">Zobrazit video</button>
+<button id="previewButton" type="submit">Zobrazit</button>
 </form>
 <section id="preview" hidden>
 <img id="thumbnail" alt="Náhled vybraného videa" referrerpolicy="no-referrer">
 <p id="author"></p>
-<label for="title">Název videa</label><input id="title" maxlength="180" autocomplete="off">
-<fieldset id="recipients"><legend>Komu video povolit?</legend><div class="profiles">
+<label id="titleLabel" for="title">Název videa</label><input id="title" maxlength="180" autocomplete="off">
+<fieldset id="recipients"><legend id="recipientsLegend">Komu video povolit?</legend><div class="profiles">
 <label><input type="radio" name="profile" value="matysek" checked><span>🦊 Matýskovi</span></label>
 <label><input type="radio" name="profile" value="filipek"><span>🐸 Filípkovi</span></label>
 <label><input type="radio" name="profile" value="hudba"><span>🎵 Hudba</span></label>
 <label><input type="radio" name="profile" value="both"><span>Oběma</span></label>
 </div></fieldset>
 <button id="add" type="button">Povolit video</button>
-<button id="another" class="secondary" type="button" hidden>Přidat další video</button>
+<button id="another" class="secondary" type="button" hidden>Přidat další</button>
 </section>
 <div id="status" role="status" aria-live="polite"></div>
 <p class="hint">TV a počítač musí být na stejné domácí síti. Přístup nemá časové omezení a zůstává aktivní, dokud běží aplikace v TV. Adresu nesdílejte mimo domácnost.</p>

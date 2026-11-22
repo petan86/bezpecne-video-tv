@@ -638,20 +638,27 @@ public final class MainActivity extends Activity {
     private void showParentArea() {
         LinearLayout content = page();
         content.addView(header("Rodičovská správa", "Hotovo", v -> showProfilePicker()));
+        // Kept at the top so it is reachable without scrolling on the TV.
+        Button update = button("⬇  Zkontrolovat a nainstalovat aktualizaci", Color.rgb(42, 106, 72));
+        update.setOnClickListener(v -> new AppUpdater(this).checkAndInstall());
+        content.addView(update, wide());
+        content.addView(text("Nainstalovaná verze " + installedVersion()
+                + " • aktualizace se stahují z projektu petan86/bezpecne-video-tv na GitHubu.", 13, Color.GRAY));
+        content.addView(space(12));
         Button phone = button("Správa z PC nebo mobilu – IP adresa / QR", Color.rgb(230, 33, 23));
         phone.setOnClickListener(v -> showPhoneAdd());
         content.addView(phone, wide());
         content.addView(text("V prohlížeči na stejné síti lze videa přidávat, prohlížet a odebírat.", 15, Color.LTGRAY));
         content.addView(space(16));
         content.addView(title("Přidat povolené video", 25));
-        content.addView(text("Vložte odkaz z YouTube a vyberte, komu se video zobrazí.", 16, Color.LTGRAY));
+        content.addView(text("Vložte odkaz na YouTube video nebo celý kanál a vyberte, komu se zobrazí.", 16, Color.LTGRAY));
         content.addView(space(12));
         Button search = button("🔎  Vyhledat video přímo na YouTube", Color.rgb(230, 33, 23));
         search.setOnClickListener(v -> askSearchText());
         content.addView(search, wide());
         content.addView(text("Stačí napsat název videa; odkaz není potřeba opisovat.", 13, Color.GRAY));
         content.addView(space(14));
-        EditText url = input("Odkaz na YouTube video");
+        EditText url = input("Odkaz na YouTube video nebo kanál");
         EditText videoTitle = input("Název pro dítě");
         content.addView(url, wide());
         content.addView(videoTitle, wide());
@@ -662,10 +669,13 @@ public final class MainActivity extends Activity {
         Button addHudba = button("Přidat do Hudby", Color.rgb(142, 68, 210));
         View.OnClickListener add = v -> {
             String profile = v == addMatysek ? VideoStore.MATYSEK : v == addFilipek ? VideoStore.FILIPEK : VideoStore.HUDBA;
-            if (store.addVideo(profile, url.getText().toString(), videoTitle.getText().toString())) {
+            String link = url.getText().toString();
+            if (store.addVideo(profile, link, videoTitle.getText().toString())) {
                 Toast.makeText(this, "Video bylo povoleno", Toast.LENGTH_SHORT).show();
                 showParentArea();
-            } else Toast.makeText(this, "Tento YouTube odkaz není platný", Toast.LENGTH_LONG).show();
+            } else if (ChannelIdentity.channelUrl(link) != null) {
+                addChannelFromLink(profile, link, videoTitle.getText().toString());
+            } else Toast.makeText(this, "Vložte odkaz na YouTube video nebo kanál", Toast.LENGTH_LONG).show();
         };
         addMatysek.setOnClickListener(add); addFilipek.setOnClickListener(add); addHudba.setOnClickListener(add);
         actions.addView(addMatysek, new LinearLayout.LayoutParams(0, dp(58), 1));
@@ -682,11 +692,6 @@ public final class MainActivity extends Activity {
         premium.setOnClickListener(v -> showPremiumLogin());
         content.addView(premium, wide());
         content.addView(text("Přihlášení probíhá přímo na stránce YouTube. Aplikace heslo neukládá.", 13, Color.GRAY));
-        content.addView(space(14));
-        Button update = button("⬇  Zkontrolovat a nainstalovat aktualizaci", Color.rgb(42, 106, 72));
-        update.setOnClickListener(v -> new AppUpdater(this).checkAndInstall());
-        content.addView(update, wide());
-        content.addView(text("Aktualizace se bezpečně stahují z projektu petan86/bezpecne-video-tv na GitHubu.", 13, Color.GRAY));
         content.addView(space(26));
         content.addView(title("Povolený obsah", 24));
         addManagementList(content, VideoStore.MATYSEK, "Matýsek");
@@ -697,6 +702,11 @@ public final class MainActivity extends Activity {
         pin.setOnClickListener(v -> changePin());
         content.addView(pin, wide());
         render(scroll(content));
+    }
+
+    private String installedVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+        catch (Exception ignored) { return "?"; }
     }
 
     private void askSearchText() {
@@ -791,7 +801,15 @@ public final class MainActivity extends Activity {
                         }
                         return true;
                     }
-                }, -1, 32795, true);
+                }, -1, 32795, true)
+                .channels(ChannelIdentity::resolve, (profile, id, title) -> {
+                    boolean saved = store.addChannel(profile, id, title);
+                    if (saved) runOnUiThread(() -> {
+                        if (phoneReceived != null) phoneReceived.setText("Povolen kanál "
+                                + profileDative(profile) + ": " + title);
+                    });
+                    return saved;
+                });
         return phoneServer;
     }
 
@@ -957,20 +975,10 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, "Načítám kanál…", Toast.LENGTH_SHORT).show();
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                String channelId = directChannelId(channelUrl);
+                String channelId = ChannelIdentity.directId(channelUrl);
                 String channelTitle = visibleTitle;
                 if (channelId == null) {
-                    HttpURLConnection connection = (HttpURLConnection) new URL(channelUrl).openConnection();
-                    connection.setConnectTimeout(10000);
-                    connection.setReadTimeout(10000);
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android TV) BezpecneVideo/0.1");
-                    StringBuilder html = new StringBuilder();
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) html.append(line);
-                    }
-                    connection.disconnect();
-                    VideoStore.Channel resolved = ChannelIdentity.fromPage(html.toString());
+                    VideoStore.Channel resolved = ChannelIdentity.resolve(channelUrl);
                     channelId = resolved.id;
                     channelTitle = resolved.title;
                 }
@@ -1002,9 +1010,24 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, "Celý kanál byl povolen", Toast.LENGTH_SHORT).show();
     }
 
-    private String directChannelId(String url) {
-        Matcher matcher = Pattern.compile("/channel/(UC[A-Za-z0-9_-]{22})").matcher(url);
-        return matcher.find() ? matcher.group(1) : null;
+    /** TV parent area: a channel link pasted into the link field allows the whole channel for {@code profile}. */
+    private void addChannelFromLink(String profile, String link, String typedTitle) {
+        Toast.makeText(this, "Načítám kanál…", Toast.LENGTH_SHORT).show();
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                VideoStore.Channel channel = ChannelIdentity.resolve(link);
+                String title = !typedTitle.trim().isEmpty() ? typedTitle.trim()
+                        : channel.title == null || channel.title.isEmpty() ? "Povolený kanál" : channel.title;
+                boolean saved = store.addChannel(profile, channel.id, title);
+                runOnUiThread(() -> {
+                    Toast.makeText(this, saved ? "Celý kanál „" + title + "“ byl povolen " + profileDative(profile)
+                            : "Tento kanál nelze povolit.", Toast.LENGTH_LONG).show();
+                    if (saved) showParentArea();
+                });
+            } catch (Exception exception) {
+                runOnUiThread(() -> Toast.makeText(this, "Kanál se nepodařilo načíst.", Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private String cleanYouTubeTitle(String title) {

@@ -20,7 +20,9 @@ function setup(hasToken = true, direct = false) {
             requests.push({path, ...options});
             if (fail) throw new TypeError('network');
             return {ok: true, json: async () => path.endsWith('preview')
-                ? {id: '16LuvR2CARA', title: 'Test title', author: '<script>not executed</script>'}
+                ? (JSON.parse(options.body).url.includes('/channel/')
+                    ? {type: 'channel', id: 'UCzkzjvNIraULEHRBseee5cQ', title: 'Test channel'}
+                    : {id: '16LuvR2CARA', title: 'Test title', author: '<script>not executed</script>'})
                 : path.endsWith('list') ? {matysek: {videos: [], channels: []}, filipek: {videos: [], channels: []}} : {ok: true}};
         }
     });
@@ -45,6 +47,17 @@ function setup(hasToken = true, direct = false) {
     assert.equal(t.nodes.get('preview').hidden, true);
     await t.nodes.get('add').events.click();
     assert.equal(t.requests.filter(request => request.path.endsWith('/add')).length, 1, 'reset must not submit previous video');
+    const channel = setup();
+    channel.nodes.get('url').value = 'https://www.youtube.com/channel/UCzkzjvNIraULEHRBseee5cQ';
+    await channel.nodes.get('lookup').events.submit({preventDefault() {}});
+    assert.equal(channel.nodes.get('preview').hidden, false);
+    assert.equal(channel.nodes.get('thumbnail').hidden, true);
+    assert.equal(channel.nodes.get('title').value, 'Test channel');
+    assert.match(channel.nodes.get('author').textContent, /Celý kanál/);
+    await channel.nodes.get('add').events.click();
+    const channelAdd = JSON.parse(channel.requests.find(r => r.path.endsWith('/add')).body);
+    assert.equal(channelAdd.type, 'channel'); assert.equal(channelAdd.id, 'UCzkzjvNIraULEHRBseee5cQ');
+    assert.match(channel.nodes.get('status').textContent, /Celý kanál je povolený Filípkovi/);
     const missing = setup(false);
     assert.equal(missing.nodes.get('previewButton').disabled, true);
     const direct = setup(false, true);
@@ -56,5 +69,5 @@ function setup(hasToken = true, direct = false) {
     await offline.nodes.get('lookup').events.submit({preventDefault() {}});
     assert.match(offline.nodes.get('status').textContent, /TV neodpovídá/);
     assert.equal(offline.nodes.get('previewButton').disabled, false);
-    console.log('Phone UI tests passed: preview, explicit profile, authorization, reset, missing session, network error.');
+    console.log('Phone UI tests passed: preview, channel link, explicit profile, authorization, reset, missing session, network error.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
