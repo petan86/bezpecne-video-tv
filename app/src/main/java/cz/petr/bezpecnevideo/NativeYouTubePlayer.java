@@ -80,7 +80,8 @@ final class NativeYouTubePlayer extends FrameLayout {
      * Adaptive playback starts from this bandwidth guess (bits/s), so the first seconds load a low
      * quality quickly; the player steps up to 720p once enough buffer is downloaded.
      */
-    private static final long START_BITRATE_ESTIMATE = 1_000_000;
+    private static final long START_BITRATE_ESTIMATE = 2_500_000;
+    private static DefaultBandwidthMeter sharedMeter;
     /** Buffer (ms) that must be loaded before switching to a higher quality. */
     private static final int MIN_BUFFER_FOR_QUALITY_INCREASE_MS = 6_000;
     private final Runnable hideActions = this::hideActions;
@@ -228,15 +229,25 @@ final class NativeYouTubePlayer extends FrameLayout {
             try {
                 // One DASH adaptation set with every quality: the player switches between them at
                 // segment boundaries, without restarting or a visible stall.
-                byte[] mpd = dashManifest(ladder, durationMs).getBytes(StandardCharsets.UTF_8);
+                // Audio goes into the same manifest when it has byte ranges: every download is then a
+                // short ranged request. One open-ended request for the whole audio file gets throttled
+                // by YouTube, which stalled playback after a few seconds and dragged the bandwidth
+                // estimate (and so the video quality) down.
+                // With captions on, keep the progressive audio item: it is what side-loads the subtitles.
+                AudioStream dashAudio = subtitleConfig.isEmpty() && hasSegmentIndex(audios.get(0)) ? audios.get(0) : null;
+                byte[] mpd = dashManifest(ladder, dashAudio, durationMs).getBytes(StandardCharsets.UTF_8);
                 DashManifest manifest = new DashManifestParser()
                         .parse(Uri.parse("https://www.youtube.com/"), new ByteArrayInputStream(mpd));
-                MediaSource video = new DashMediaSource.Factory(data).createMediaSource(manifest,
+                MediaSource dash = new DashMediaSource.Factory(data).createMediaSource(manifest,
                         new MediaItem.Builder().setUri(Uri.EMPTY).setMimeType(MimeTypes.APPLICATION_MPD).build());
-                // Subtitles ride along with the audio item; DefaultMediaSourceFactory side-loads them.
-                MediaSource audio = factory.createMediaSource(new MediaItem.Builder()
-                        .setUri(audios.get(0).getContent()).setSubtitleConfigurations(subtitleConfig).build());
-                source = new MergingMediaSource(video, audio);
+                if (dashAudio != null) {
+                    source = dash;
+                } else {
+                    // Subtitles ride along with the audio item; DefaultMediaSourceFactory side-loads them.
+                    MediaSource audio = factory.createMediaSource(new MediaItem.Builder()
+                            .setUri(audios.get(0).getContent()).setSubtitleConfigurations(subtitleConfig).build());
+                    source = new MergingMediaSource(dash, audio);
+                }
                 adaptiveActive = true;
             } catch (Exception adaptiveFailed) {
                 ladder = new ArrayList<>();
@@ -251,8 +262,7 @@ final class NativeYouTubePlayer extends FrameLayout {
                 source = new MergingMediaSource(source, audio);
             }
         }
-        DefaultBandwidthMeter meter = new DefaultBandwidthMeter.Builder(getContext())
-                .setInitialBitrateEstimate(START_BITRATE_ESTIMATE).build();
+        DefaultBandwidthMeter meter = bandwidthMeter(getContext());
         DefaultTrackSelector selector = new DefaultTrackSelector(getContext(), new AdaptiveTrackSelection.Factory(
                 MIN_BUFFER_FOR_QUALITY_INCREASE_MS,
                 AdaptiveTrackSelection.DEFAULT_MAX_DURATION_FOR_QUALITY_DECREASE_MS,
@@ -318,7 +328,7 @@ final class NativeYouTubePlayer extends FrameLayout {
         List<Integer> heights = new ArrayList<>();
         for (int i = ladder.size() - 1; i >= 0; i--) heights.add(height(ladder.get(i)));
         String[] labels = new String[heights.size() + 1];
-        labels[0] = "Automaticky (začne nižší, pak až 720p)";
+        labels[0] = "Automaticky (podle rychlosti sítě, max 720p)";
         int checked = 0;
         for (int i = 0; i < heights.size(); i++) {
             labels[i + 1] = heights.get(i) + "p";
@@ -363,7 +373,36 @@ final class NativeYouTubePlayer extends FrameLayout {
         return new ArrayList<>();
     }
 
+    /**
+     * One meter for the whole app: the measured speed carries over to the next video (and to the
+     * restart after a quality/captions change), so later videos start at the right quality at once.
+     */
+    private static synchronized DefaultBandwidthMeter bandwidthMeter(Context context) {
+        if (sharedMeter == null) {
+            sharedMeter = new DefaultBandwidthMeter.Builder(context.getApplicationContext())
+                    .setInitialBitrateEstimate(START_BITRATE_ESTIMATE).build();
+        }
+        return sharedMeter;
+    }
+
+    private static boolean hasSegmentIndex(AudioStream stream) {
+        return stream.isUrl() && !stream.getContent().isEmpty() && stream.getFormat() != null
+                && stream.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP
+                && stream.getInitStart() >= 0 && stream.getInitEnd() > stream.getInitStart()
+                && stream.getIndexStart() > stream.getInitEnd() && stream.getIndexEnd() > stream.getIndexStart();
+    }
+
+    private static int audioBandwidth(AudioStream stream) {
+        if (stream.getBitrate() > 0) return stream.getBitrate();
+        if (stream.getAverageBitrate() > 0) return stream.getAverageBitrate() * 1000;
+        return 128_000;
+    }
+
     static String dashManifest(List<VideoStream> ladder, long durationMs) {
+        return dashManifest(ladder, null, durationMs);
+    }
+
+    static String dashManifest(List<VideoStream> ladder, AudioStream audio, long durationMs) {
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
                 .append("<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\" minBufferTime=\"PT1.5S\"")
                 .append(" profiles=\"urn:mpeg:dash:profile:isoff-on-demand:2011\" mediaPresentationDuration=\"PT")
@@ -381,7 +420,20 @@ final class NativeYouTubePlayer extends FrameLayout {
                     .append("\"><Initialization range=\"").append(stream.getInitStart()).append('-').append(stream.getInitEnd())
                     .append("\"/></SegmentBase></Representation>");
         }
-        return xml.append("</AdaptationSet></Period></MPD>").toString();
+        xml.append("</AdaptationSet>");
+        if (audio != null) {
+            xml.append("<AdaptationSet contentType=\"audio\" subsegmentAlignment=\"true\" mimeType=\"")
+                    .append(xmlEscape(audio.getFormat().getMimeType())).append("\">")
+                    .append("<Representation id=\"a").append(audio.getItag()).append('"');
+            if (audio.getCodec() != null && !audio.getCodec().isEmpty())
+                xml.append(" codecs=\"").append(xmlEscape(audio.getCodec())).append('"');
+            xml.append(" bandwidth=\"").append(audioBandwidth(audio)).append("\"><BaseURL>")
+                    .append(xmlEscape(audio.getContent())).append("</BaseURL>")
+                    .append("<SegmentBase indexRange=\"").append(audio.getIndexStart()).append('-').append(audio.getIndexEnd())
+                    .append("\"><Initialization range=\"").append(audio.getInitStart()).append('-').append(audio.getInitEnd())
+                    .append("\"/></SegmentBase></Representation></AdaptationSet>");
+        }
+        return xml.append("</Period></MPD>").toString();
     }
 
     private static int bandwidth(VideoStream stream) {

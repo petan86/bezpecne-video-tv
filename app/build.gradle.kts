@@ -10,8 +10,8 @@ android {
         applicationId = "cz.petr.bezpecnevideo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.3.0"
+        versionCode = 37
+        versionName = "0.3.1"
     }
 
     buildTypes {
